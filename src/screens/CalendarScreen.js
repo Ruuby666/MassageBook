@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
+import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import DaySelector from '../components/DaySelector';
@@ -9,21 +10,30 @@ import FloatingActionButton from '../components/FloatingActionButton';
 import { mockAppointments } from '../data/mockAppointments';
 import { mockBlocks } from '../data/mockBlocks';
 import { colors, spacing, typography } from '../theme';
-import { buildDayWindow, formatMonthYear, isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
+import {
+  buildDayWindow,
+  formatMonthYear,
+  isSameDay,
+  timeStringToDate,
+  toDateKey,
+  toLocalIsoString,
+} from '../utils/dateHelpers';
 
 export default function CalendarScreen() {
   const days = useMemo(() => buildDayWindow(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(days[0]);
+  const [appointments, setAppointments] = useState(mockAppointments);
   const [blocks, setBlocks] = useState(mockBlocks);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [blockModalVisible, setBlockModalVisible] = useState(false);
+  const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
 
   const daysWithAppointments = useMemo(() => {
     const set = new Set();
-    mockAppointments.forEach((appointment) => {
+    appointments.forEach((appointment) => {
       set.add(new Date(appointment.date).toDateString());
     });
     return set;
-  }, []);
+  }, [appointments]);
 
   const blockedDays = useMemo(() => {
     const set = new Set();
@@ -44,7 +54,7 @@ export default function CalendarScreen() {
   const itemsForSelectedDay = useMemo(() => {
     const dateKey = toDateKey(selectedDate);
 
-    const dayAppointments = mockAppointments
+    const dayAppointments = appointments
       .filter((appointment) => isSameDay(new Date(appointment.date), selectedDate))
       .map((appointment) => ({
         type: 'appointment',
@@ -61,18 +71,30 @@ export default function CalendarScreen() {
       }));
 
     return [...dayAppointments, ...dayBlocks].sort((a, b) => a.sortKey - b.sortKey);
-  }, [selectedDate, blocks]);
+  }, [selectedDate, appointments, blocks]);
 
   function handleConfirmBlock(blockData) {
     setBlocks((prev) => [
       ...prev,
       { id: `b-${Date.now()}`, date: toDateKey(selectedDate), ...blockData },
     ]);
-    setModalVisible(false);
+    setBlockModalVisible(false);
   }
 
   function handleDeleteBlock(id) {
     setBlocks((prev) => prev.filter((block) => block.id !== id));
+  }
+
+  function handleConfirmAppointment({ startTime, ...appointmentData }) {
+    setAppointments((prev) => [
+      ...prev,
+      {
+        id: `a-${Date.now()}`,
+        ...appointmentData,
+        date: toLocalIsoString(timeStringToDate(selectedDate, startTime)),
+      },
+    ]);
+    setAppointmentModalVisible(false);
   }
 
   return (
@@ -105,12 +127,28 @@ export default function CalendarScreen() {
         />
       )}
 
-      <FloatingActionButton onPress={() => setModalVisible(true)} />
+      <FloatingActionButton
+        icon="add"
+        bottomOffset={96}
+        onPress={() => setAppointmentModalVisible(true)}
+      />
+      <FloatingActionButton
+        icon="lock-closed"
+        bottomOffset={28}
+        onPress={() => setBlockModalVisible(true)}
+      />
+
+      <AppointmentModal
+        visible={appointmentModalVisible}
+        date={selectedDate}
+        onClose={() => setAppointmentModalVisible(false)}
+        onConfirm={handleConfirmAppointment}
+      />
 
       <BlockModal
-        visible={modalVisible}
+        visible={blockModalVisible}
         date={selectedDate}
-        onClose={() => setModalVisible(false)}
+        onClose={() => setBlockModalVisible(false)}
         onConfirm={handleConfirmBlock}
       />
     </SafeAreaView>
@@ -131,7 +169,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xl + 64,
+    paddingBottom: spacing.xl + 128,
   },
   emptyState: {
     flex: 1,
