@@ -1,0 +1,145 @@
+:root {
+  --background: #f5f1ec;
+  --surface: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #8a8a8a;
+  --accent: #2d6a5f;
+  --accent-soft: #dceae7;
+  --border: #e7e1d8;
+  --error: #b5602f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  margin: 0 0 28px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+input[type='text'],
+input[type='tel'],
+input[type='date'],
+input[type='time'],
+textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-weight: 400;
+}
+
+textarea {
+  resize: vertical;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+legend {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.duration-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.chip:has(input:checked) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+
+button[type='submit'] {
+  margin-top: 8px;
+  background: var(--accent);
+  color: var(--surface);
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.message {
+  min-height: 20px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.message.success {
+  color: var(--accent);
+}
+
+.message.error {
+  color: var(--error);
+}

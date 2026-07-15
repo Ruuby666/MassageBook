@@ -19,6 +19,7 @@ exports.createReservation = onCall(async (request) => {
 
   const clientName = String(data.clientName || '').trim();
   const phone = String(data.phone || '').trim();
+  const email = String(data.email || '').trim();
   const address = String(data.address || '').trim();
   const service = String(data.service || '').trim();
   const durationMinutes = Number(data.durationMinutes);
@@ -29,6 +30,11 @@ exports.createReservation = onCall(async (request) => {
   }
   if (!address) {
     throw new HttpsError('invalid-argument', 'La dirección es obligatoria.');
+  }
+  // Email is required for the public form (reminders need it), optional
+  // when the therapist books manually — she may not always collect it.
+  if (!request.auth && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpsError('invalid-argument', 'Ingresa un correo válido para tu recordatorio.');
   }
   if (!SERVICE_DURATIONS.includes(durationMinutes)) {
     throw new HttpsError(
@@ -79,6 +85,7 @@ exports.createReservation = onCall(async (request) => {
   const docRef = await db.collection('reservations').add({
     clientName,
     phone,
+    email,
     address,
     service: service || 'Masaje',
     durationMinutes,
