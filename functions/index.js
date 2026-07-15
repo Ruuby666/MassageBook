@@ -1,67 +1,41 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const {
+  ValidationError,
+  parseReservation,
+  assertFutureDate,
+  getOverlapWindow,
+  hasOverlap,
+} = require('./validation');
 
 initializeApp();
 const db = getFirestore();
 
-// Keep in sync with src/constants/services.js in the Expo app.
-const SERVICE_DURATIONS = [30, 50, 60, 90];
-const BUFFER_MINUTES = 30;
-
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
-// (authenticated). Unauthenticated calls get the 30-minute buffer between
-// bookings; authenticated (therapist) calls only block literal overlaps,
-// since the therapist may reasonably want to book back-to-back.
+// (authenticated). See validation.js for the business rules.
 exports.createReservation = onCall(async (request) => {
-  const data = request.data || {};
+  const authenticated = Boolean(request.auth);
 
-  const clientName = String(data.clientName || '').trim();
-  const phone = String(data.phone || '').trim();
-  const email = String(data.email || '').trim();
-  const address = String(data.address || '').trim();
-  const service = String(data.service || '').trim();
-  const durationMinutes = Number(data.durationMinutes);
-  const notes = String(data.notes || '').trim();
-
-  if (!clientName) {
-    throw new HttpsError('invalid-argument', 'El nombre del cliente es obligatorio.');
-  }
-  if (!address) {
-    throw new HttpsError('invalid-argument', 'La dirección es obligatoria.');
-  }
-  // Email is required for the public form (reminders need it), optional
-  // when the therapist books manually — she may not always collect it.
-  if (!request.auth && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new HttpsError('invalid-argument', 'Ingresa un correo válido para tu recordatorio.');
-  }
-  if (!SERVICE_DURATIONS.includes(durationMinutes)) {
-    throw new HttpsError(
-      'invalid-argument',
-      `La duración debe ser una de: ${SERVICE_DURATIONS.join(', ')} minutos.`
-    );
+  let reservation;
+  try {
+    reservation = parseReservation(request.data || {}, { authenticated });
+    assertFutureDate(reservation.startDate);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    throw error;
   }
 
-  const startDate = new Date(data.date);
-  if (Number.isNaN(startDate.getTime())) {
-    throw new HttpsError('invalid-argument', 'La fecha/hora no es válida.');
-  }
-  if (startDate.getTime() <= Date.now()) {
-    throw new HttpsError('invalid-argument', 'La fecha debe ser en el futuro.');
-  }
-
-  const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
-  const bufferMs = (request.auth ? 0 : BUFFER_MINUTES) * 60000;
-  const rangeStart = startDate.getTime() - bufferMs;
-  const rangeEnd = endDate.getTime() + bufferMs;
-
-  // Widen the query well beyond the buffer/duration instead of computing
-  // "calendar day" boundaries — the server has no idea what the client's
-  // local day even is, and setHours() here would use the server's (UTC)
-  // clock, silently shifting the window by several hours.
-  const queryStart = new Date(rangeStart - 4 * 60 * 60000);
-  const queryEnd = new Date(rangeEnd + 4 * 60 * 60000);
+  const { clientName, phone, email, address, service, durationMinutes, notes, startDate } =
+    reservation;
+  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
+    startDate,
+    durationMinutes,
+    authenticated
+  );
 
   const nearbySnapshot = await db
     .collection('reservations')
@@ -69,14 +43,13 @@ exports.createReservation = onCall(async (request) => {
     .where('date', '<', Timestamp.fromDate(queryEnd))
     .get();
 
-  const overlaps = nearbySnapshot.docs.some((doc) => {
+  const existingReservations = nearbySnapshot.docs.map((doc) => {
     const existing = doc.data();
-    const existingStart = existing.date.toDate().getTime();
-    const existingEnd = existingStart + existing.durationMinutes * 60000;
-    return rangeStart < existingEnd && existingStart < rangeEnd;
+    const start = existing.date.toDate().getTime();
+    return { start, end: start + existing.durationMinutes * 60000 };
   });
 
-  if (overlaps) {
+  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
     throw new HttpsError(
       'failed-precondition',
       'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
