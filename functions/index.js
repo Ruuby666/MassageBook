@@ -52,23 +52,24 @@ exports.createReservation = onCall(async (request) => {
   }
 
   const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
-
-  const dayStart = new Date(startDate);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-
-  const sameDaySnapshot = await db
-    .collection('reservations')
-    .where('date', '>=', Timestamp.fromDate(dayStart))
-    .where('date', '<', Timestamp.fromDate(dayEnd))
-    .get();
-
   const bufferMs = (request.auth ? 0 : BUFFER_MINUTES) * 60000;
   const rangeStart = startDate.getTime() - bufferMs;
   const rangeEnd = endDate.getTime() + bufferMs;
 
-  const overlaps = sameDaySnapshot.docs.some((doc) => {
+  // Widen the query well beyond the buffer/duration instead of computing
+  // "calendar day" boundaries — the server has no idea what the client's
+  // local day even is, and setHours() here would use the server's (UTC)
+  // clock, silently shifting the window by several hours.
+  const queryStart = new Date(rangeStart - 4 * 60 * 60000);
+  const queryEnd = new Date(rangeEnd + 4 * 60 * 60000);
+
+  const nearbySnapshot = await db
+    .collection('reservations')
+    .where('date', '>=', Timestamp.fromDate(queryStart))
+    .where('date', '<', Timestamp.fromDate(queryEnd))
+    .get();
+
+  const overlaps = nearbySnapshot.docs.some((doc) => {
     const existing = doc.data();
     const existingStart = existing.date.toDate().getTime();
     const existingEnd = existingStart + existing.durationMinutes * 60000;
