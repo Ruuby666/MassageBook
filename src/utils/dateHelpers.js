@@ -67,3 +67,10 @@ export function formatTimeString(timeString) {
     minute: '2-digit',
   });
 }
+
+export function toLocalIsoString(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}:00`;
+}
