@@ -13,6 +13,7 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
   const [endTime, setEndTime] = useState(DEFAULT_END);
   const [reason, setReason] = useState('');
   const [pickerTarget, setPickerTarget] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   function reset() {
     setAllDay(true);
@@ -27,18 +28,25 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
     onClose();
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!allDay && startTime >= endTime) {
       Alert.alert('Horario inválido', 'La hora de inicio debe ser antes que la hora de fin.');
       return;
     }
-    onConfirm({
-      allDay,
-      startTime: allDay ? null : startTime,
-      endTime: allDay ? null : endTime,
-      reason: reason.trim(),
-    });
-    reset();
+    setSaving(true);
+    try {
+      await onConfirm({
+        allDay,
+        startTime: allDay ? null : startTime,
+        endTime: allDay ? null : endTime,
+        reason: reason.trim(),
+      });
+      reset();
+    } catch (error) {
+      Alert.alert('No se pudo bloquear', error.message || 'Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleTimeChange(event, selected) {
@@ -91,11 +99,15 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
           />
 
           <View style={styles.actions}>
-            <Pressable style={[styles.button, styles.cancelButton]} onPress={handleClose}>
+            <Pressable style={[styles.button, styles.cancelButton]} onPress={handleClose} disabled={saving}>
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </Pressable>
-            <Pressable style={[styles.button, styles.confirmButton]} onPress={handleConfirm}>
-              <Text style={styles.confirmButtonText}>Bloquear</Text>
+            <Pressable
+              style={[styles.button, styles.confirmButton, saving && styles.buttonDisabled]}
+              onPress={handleConfirm}
+              disabled={saving}
+            >
+              <Text style={styles.confirmButtonText}>{saving ? 'Bloqueando…' : 'Bloquear'}</Text>
             </Pressable>
           </View>
         </View>
@@ -181,6 +193,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: colors.accent,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   confirmButtonText: {
     color: colors.surface,
