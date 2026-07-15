@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
 import DaySelector from '../components/DaySelector';
 import { mockAppointments } from '../data/mockAppointments';
