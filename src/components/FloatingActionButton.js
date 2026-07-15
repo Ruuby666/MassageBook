@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 
-export default function FloatingActionButton({ onPress, icon = 'lock-closed' }) {
+export default function FloatingActionButton({ onPress, icon = 'lock-closed', bottomOffset = 28 }) {
   return (
-    <Pressable style={styles.fab} onPress={onPress} hitSlop={8}>
+    <Pressable style={[styles.fab, { bottom: bottomOffset }]} onPress={onPress} hitSlop={8}>
       <Ionicons name={icon} size={24} color={colors.surface} />
     </Pressable>
   );
@@ -14,7 +14,6 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 28,
     width: 56,
     height: 56,
     borderRadius: 28,
