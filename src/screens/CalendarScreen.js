@@ -51,11 +51,14 @@ export default function CalendarScreen() {
     return set;
   }, [blocks]);
 
+  const appointmentsForSelectedDay = useMemo(() => {
+    return appointments.filter((appointment) => isSameDay(new Date(appointment.date), selectedDate));
+  }, [appointments, selectedDate]);
+
   const itemsForSelectedDay = useMemo(() => {
     const dateKey = toDateKey(selectedDate);
 
-    const dayAppointments = appointments
-      .filter((appointment) => isSameDay(new Date(appointment.date), selectedDate))
+    const dayAppointments = appointmentsForSelectedDay
       .map((appointment) => ({
         type: 'appointment',
         sortKey: new Date(appointment.date).getTime(),
@@ -71,7 +74,7 @@ export default function CalendarScreen() {
       }));
 
     return [...dayAppointments, ...dayBlocks].sort((a, b) => a.sortKey - b.sortKey);
-  }, [selectedDate, appointments, blocks]);
+  }, [selectedDate, appointmentsForSelectedDay, blocks]);
 
   function handleConfirmBlock(blockData) {
     setBlocks((prev) => [
@@ -141,6 +144,7 @@ export default function CalendarScreen() {
       <AppointmentModal
         visible={appointmentModalVisible}
         date={selectedDate}
+        existingAppointments={appointmentsForSelectedDay}
         onClose={() => setAppointmentModalVisible(false)}
         onConfirm={handleConfirmAppointment}
       />

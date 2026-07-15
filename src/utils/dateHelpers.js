@@ -68,6 +68,10 @@ export function formatTimeString(timeString) {
   });
 }
 
+export function rangesOverlap(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
 export function toLocalIsoString(date) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(

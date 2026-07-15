@@ -3,12 +3,18 @@ import { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SERVICE_DURATIONS } from '../constants/services';
 import { colors, spacing, typography } from '../theme';
-import { dateToTimeString, formatFullDate, formatTimeString, timeStringToDate } from '../utils/dateHelpers';
+import {
+  dateToTimeString,
+  formatFullDate,
+  formatTimeString,
+  rangesOverlap,
+  timeStringToDate,
+} from '../utils/dateHelpers';
 
 const DEFAULT_TIME = '09:00';
 const DEFAULT_DURATION = 60;
 
-export default function AppointmentModal({ visible, date, onClose, onConfirm }) {
+export default function AppointmentModal({ visible, date, existingAppointments = [], onClose, onConfirm }) {
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -39,6 +45,22 @@ export default function AppointmentModal({ visible, date, onClose, onConfirm }) 
       Alert.alert('Faltan datos', 'El nombre del cliente y la dirección son obligatorios.');
       return;
     }
+
+    const newStart = timeStringToDate(date, startTime);
+    const newEnd = new Date(newStart.getTime() + duration * 60000);
+    const overlaps = existingAppointments.some((appointment) => {
+      const apptStart = new Date(appointment.date);
+      const apptEnd = new Date(apptStart.getTime() + appointment.durationMinutes * 60000);
+      return rangesOverlap(newStart, newEnd, apptStart, apptEnd);
+    });
+    if (overlaps) {
+      Alert.alert(
+        'Horario ocupado',
+        'Ya existe una cita que se cruza con este horario. Elige otra hora.'
+      );
+      return;
+    }
+
     onConfirm({
       clientName: clientName.trim(),
       phone: phone.trim(),
