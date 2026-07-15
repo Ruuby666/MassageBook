@@ -17,16 +17,19 @@ const DEFAULT_DURATION = 60;
 export default function AppointmentModal({ visible, date, existingAppointments = [], onClose, onConfirm }) {
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [service, setService] = useState('');
   const [duration, setDuration] = useState(DEFAULT_DURATION);
   const [startTime, setStartTime] = useState(DEFAULT_TIME);
   const [notes, setNotes] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function reset() {
     setClientName('');
     setPhone('');
+    setEmail('');
     setAddress('');
     setService('');
     setDuration(DEFAULT_DURATION);
@@ -40,7 +43,7 @@ export default function AppointmentModal({ visible, date, existingAppointments =
     onClose();
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!clientName.trim() || !address.trim()) {
       Alert.alert('Faltan datos', 'El nombre del cliente y la dirección son obligatorios.');
       return;
@@ -61,16 +64,24 @@ export default function AppointmentModal({ visible, date, existingAppointments =
       return;
     }
 
-    onConfirm({
-      clientName: clientName.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      service: service.trim() || 'Masaje',
-      durationMinutes: duration,
-      startTime,
-      notes: notes.trim(),
-    });
-    reset();
+    setSaving(true);
+    try {
+      await onConfirm({
+        clientName: clientName.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        address: address.trim(),
+        service: service.trim() || 'Masaje',
+        durationMinutes: duration,
+        startTime,
+        notes: notes.trim(),
+      });
+      reset();
+    } catch (error) {
+      Alert.alert('No se pudo guardar', error.message || 'Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleTimeChange(event, selected) {
@@ -99,6 +110,15 @@ export default function AppointmentModal({ visible, date, existingAppointments =
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Correo (opcional, para el recordatorio)"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
           />
           <TextInput
             style={styles.input}
@@ -157,11 +177,15 @@ export default function AppointmentModal({ visible, date, existingAppointments =
           />
 
           <View style={styles.actions}>
-            <Pressable style={[styles.button, styles.cancelButton]} onPress={handleClose}>
+            <Pressable style={[styles.button, styles.cancelButton]} onPress={handleClose} disabled={saving}>
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </Pressable>
-            <Pressable style={[styles.button, styles.confirmButton]} onPress={handleConfirm}>
-              <Text style={styles.confirmButtonText}>Guardar</Text>
+            <Pressable
+              style={[styles.button, styles.confirmButton, saving && styles.buttonDisabled]}
+              onPress={handleConfirm}
+              disabled={saving}
+            >
+              <Text style={styles.confirmButtonText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -260,6 +284,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: colors.accent,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   confirmButtonText: {
     color: colors.surface,

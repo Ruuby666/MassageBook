@@ -1,5 +1,16 @@
-import { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
 import AppointmentModal from '../components/AppointmentModal';
@@ -7,8 +18,7 @@ import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import DaySelector from '../components/DaySelector';
 import FloatingActionButton from '../components/FloatingActionButton';
-import { mockAppointments } from '../data/mockAppointments';
-import { mockBlocks } from '../data/mockBlocks';
+import { db, functions } from '../firebase';
 import { colors, spacing, typography } from '../theme';
 import {
   buildDayWindow,
@@ -16,16 +26,52 @@ import {
   isSameDay,
   timeStringToDate,
   toDateKey,
-  toLocalIsoString,
 } from '../utils/dateHelpers';
+
+const createReservation = httpsCallable(functions, 'createReservation');
 
 export default function CalendarScreen() {
   const days = useMemo(() => buildDayWindow(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(days[0]);
-  const [appointments, setAppointments] = useState(mockAppointments);
-  const [blocks, setBlocks] = useState(mockBlocks);
+  const [appointments, setAppointments] = useState([]);
+  const [blocks, setBlocks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
+
+  useEffect(() => {
+    const unsubscribeAppointments = onSnapshot(
+      query(collection(db, 'reservations'), orderBy('date')),
+      (snapshot) => {
+        setAppointments(
+          snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return { id: docSnap.id, ...data, date: data.date.toDate() };
+          })
+        );
+        setLoading(false);
+      },
+      (error) => {
+        Alert.alert('Error', 'No se pudieron cargar las citas: ' + error.message);
+        setLoading(false);
+      }
+    );
+
+    const unsubscribeBlocks = onSnapshot(
+      collection(db, 'blocks'),
+      (snapshot) => {
+        setBlocks(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+      },
+      (error) => {
+        Alert.alert('Error', 'No se pudieron cargar los bloqueos: ' + error.message);
+      }
+    );
+
+    return () => {
+      unsubscribeAppointments();
+      unsubscribeBlocks();
+    };
+  }, []);
 
   const daysWithAppointments = useMemo(() => {
     const set = new Set();
@@ -58,12 +104,11 @@ export default function CalendarScreen() {
   const itemsForSelectedDay = useMemo(() => {
     const dateKey = toDateKey(selectedDate);
 
-    const dayAppointments = appointmentsForSelectedDay
-      .map((appointment) => ({
-        type: 'appointment',
-        sortKey: new Date(appointment.date).getTime(),
-        data: appointment,
-      }));
+    const dayAppointments = appointmentsForSelectedDay.map((appointment) => ({
+      type: 'appointment',
+      sortKey: new Date(appointment.date).getTime(),
+      data: appointment,
+    }));
 
     const dayBlocks = blocks
       .filter((block) => block.date === dateKey)
@@ -76,28 +121,37 @@ export default function CalendarScreen() {
     return [...dayAppointments, ...dayBlocks].sort((a, b) => a.sortKey - b.sortKey);
   }, [selectedDate, appointmentsForSelectedDay, blocks]);
 
-  function handleConfirmBlock(blockData) {
-    setBlocks((prev) => [
-      ...prev,
-      { id: `b-${Date.now()}`, date: toDateKey(selectedDate), ...blockData },
-    ]);
+  async function handleConfirmBlock(blockData) {
+    await addDoc(collection(db, 'blocks'), {
+      date: toDateKey(selectedDate),
+      ...blockData,
+      createdAt: serverTimestamp(),
+    });
     setBlockModalVisible(false);
   }
 
-  function handleDeleteBlock(id) {
-    setBlocks((prev) => prev.filter((block) => block.id !== id));
+  async function handleDeleteBlock(id) {
+    try {
+      await deleteDoc(doc(db, 'blocks', id));
+    } catch (error) {
+      Alert.alert('No se pudo eliminar', error.message);
+    }
   }
 
-  function handleConfirmAppointment({ startTime, ...appointmentData }) {
-    setAppointments((prev) => [
-      ...prev,
-      {
-        id: `a-${Date.now()}`,
-        ...appointmentData,
-        date: toLocalIsoString(timeStringToDate(selectedDate, startTime)),
-      },
-    ]);
+  async function handleConfirmAppointment({ startTime, ...appointmentData }) {
+    await createReservation({
+      ...appointmentData,
+      date: timeStringToDate(selectedDate, startTime).toISOString(),
+    });
     setAppointmentModalVisible(false);
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -163,6 +217,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     fontSize: typography.header,

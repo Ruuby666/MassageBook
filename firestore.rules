@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Reservations hold client PII (name, phone, address).
+    // Only the authenticated therapist can read them. All writes go
+    // through the createReservation Cloud Function (Admin SDK bypasses
+    // these rules), so both the public web form and the therapist's
+    // manual-entry flow share one place that enforces fixed durations
+    // and the 30-minute buffer between bookings.
+    match /reservations/{reservationId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Availability blocks are only created by the therapist inside the app.
+    match /blocks/{blockId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}

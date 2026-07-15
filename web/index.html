@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reservar masaje a domicilio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <h1>Reserva tu masaje</h1>
+      <p class="subtitle">Servicio a domicilio. Completa tus datos y elige un horario.</p>
+
+      <form id="booking-form" novalidate>
+        <label>
+          Nombre completo
+          <input type="text" name="clientName" required autocomplete="name" />
+        </label>
+
+        <label>
+          Teléfono
+          <input type="tel" name="phone" required autocomplete="tel" />
+        </label>
+
+        <label>
+          Correo (para tu recordatorio)
+          <input type="email" name="email" required autocomplete="email" />
+        </label>
+
+        <label>
+          Dirección (donde se realizará el masaje)
+          <input type="text" name="address" required autocomplete="street-address" />
+        </label>
+
+        <label>
+          Tipo de masaje
+          <input type="text" name="service" placeholder="Ej. Masaje relajante" />
+        </label>
+
+        <fieldset>
+          <legend>Duración</legend>
+          <div class="duration-options" id="duration-options">
+            <label class="chip"><input type="radio" name="durationMinutes" value="30" /> 30 min</label>
+            <label class="chip"><input type="radio" name="durationMinutes" value="50" /> 50 min</label>
+            <label class="chip"><input type="radio" name="durationMinutes" value="60" checked /> 60 min</label>
+            <label class="chip"><input type="radio" name="durationMinutes" value="90" /> 90 min</label>
+          </div>
+        </fieldset>
+
+        <label>
+          Fecha
+          <input type="date" name="date" required />
+        </label>
+
+        <label>
+          Hora
+          <input type="time" name="time" required />
+        </label>
+
+        <label>
+          Notas (opcional)
+          <textarea name="notes" rows="3"></textarea>
+        </label>
+
+        <button type="submit" id="submit-button">Reservar</button>
+        <p id="form-message" class="message" role="status"></p>
+      </form>
+    </main>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
