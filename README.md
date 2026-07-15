@@ -1,0 +1,91 @@
+# MassageBook
+
+Sistema de reservas para un masajista independiente a domicilio. Tiene dos lados que comparten una sola base de datos en Firebase:
+
+- **App del terapeuta** (React Native / Expo) — calendario personal donde el terapeuta ve todas sus citas, crea citas manualmente, y bloquea horarios o días completos para que los clientes no puedan reservar ahí.
+- **Formulario web del cliente** (HTML/JS estático en Firebase Hosting) — el cliente abre un link, llena sus datos y elige un horario. La reserva se guarda directo en Firestore y aparece al instante en la app del terapeuta.
+
+Diseñado para vivir dentro de las capas gratuitas de Firebase (excepto Cloud Functions, que requiere el plan Blaze aunque el costo real sea $0 con este volumen de uso).
+
+## Estructura del proyecto
+
+```
+App.js                    Punto de entrada: gate de autenticación (login o calendario)
+src/
+  screens/
+    LoginScreen.js         Login con email/contraseña
+    CalendarScreen.js      Calendario principal (selector de días + agenda + FABs)
+  components/
+    DaySelector.js          Tira horizontal de días con indicadores de citas/bloqueos
+    AppointmentCard.js       Tarjeta de una cita en la agenda
+    AppointmentModal.js      Modal para crear una cita manualmente
+    BlockCard.js              Tarjeta de un bloqueo en la agenda
+    BlockModal.js              Modal para bloquear un día completo u horas
+    FloatingActionButton.js    Botón flotante reutilizable (apilable)
+  firebase/
+    config.js               Config pública del proyecto Firebase (no es secreta)
+    index.js                Inicialización de Auth/Firestore/Functions para la app
+  constants/services.js     SERVICE_DURATIONS: duraciones fijas (30/50/60/90 min)
+  utils/dateHelpers.js      Helpers de fecha/hora (formateo, solapamiento, zonas horarias)
+  theme.js                  Colores, tipografía y espaciados compartidos
+
+functions/
+  index.js                 Cloud Function createReservation (único punto de escritura
+                             de reservas; valida duración, campos requeridos, fecha
+                             futura y solapamiento con colchón de 30 min)
+
+web/
+  index.html, styles.css, script.js, firebase-config.js
+                             Formulario público de reservas (Firebase Hosting)
+
+firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
+                             Configuración del proyecto Firebase
+```
+
+## Modelo de datos (Firestore)
+
+**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por la Cloud Function `createReservation` (rules bloquean writes directos).
+```
+clientName, phone, email, address, service, durationMinutes,
+date (Timestamp), notes, createdAt, reminderSent
+```
+
+**`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
+```
+date ("YYYY-MM-DD"), allDay (bool), startTime, endTime, reason, createdAt
+```
+
+## Reglas de negocio clave
+
+- Duración de la cita siempre es una de **30, 50, 60 o 90 minutos** — nunca texto libre.
+- El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.
+- La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
+- Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
+
+## Desarrollo local
+
+```bash
+npm install
+npx expo start          # luego escanea el QR con Expo Go, o presiona 'a' con un emulador Android corriendo
+```
+
+Para levantar el formulario web localmente: abre `web/index.html` con un servidor estático (necesita HTTPS/localhost para que el SDK de Firebase funcione bien; `npx firebase-tools emulators:start --only hosting` es una opción).
+
+## Desplegar cambios a Firebase
+
+```bash
+# Todo junto
+npx firebase-tools deploy
+
+# O por partes
+npx firebase-tools deploy --only firestore:rules
+npx firebase-tools deploy --only functions
+npx firebase-tools deploy --only hosting
+```
+
+Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
+
+## Pendiente / próximas fases
+
+- **Recordatorios por correo**: Cloud Function programada (diaria) que busque citas a 4 días de distancia y envíe un recordatorio por email vía Resend. El campo `email` y `reminderSent` en `reservations` ya están listos para esto.
+- **WhatsApp** como canal de recordatorio adicional (mencionado en el brief original, no priorizado aún).
