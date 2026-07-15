@@ -6,6 +6,8 @@ export const colors = {
   accent: '#2D6A5F',
   accentSoft: '#DCEAE7',
   border: '#E7E1D8',
+  blocked: '#B5602F',
+  blockedSurface: '#E4DED4',
 };
 
 export const typography = {

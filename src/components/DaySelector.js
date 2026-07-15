@@ -1,9 +1,17 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, daySelector, typography } from '../theme';
 import { formatDayLabel, isSameDay } from '../utils/dateHelpers';
 
-export default function DaySelector({ days, selectedDate, onSelectDate, daysWithAppointments }) {
+export default function DaySelector({
+  days,
+  selectedDate,
+  onSelectDate,
+  daysWithAppointments,
+  blockedDays,
+  fullyBlockedDays,
+}) {
   return (
     <FlatList
       horizontal
@@ -13,7 +21,10 @@ export default function DaySelector({ days, selectedDate, onSelectDate, daysWith
       contentContainerStyle={styles.list}
       renderItem={({ item: day }) => {
         const selected = isSameDay(day, selectedDate);
-        const hasAppointments = daysWithAppointments.has(day.toDateString());
+        const dayKey = day.toDateString();
+        const hasAppointments = daysWithAppointments.has(dayKey);
+        const hasBlock = blockedDays.has(dayKey);
+        const fullyBlocked = fullyBlockedDays.has(dayKey);
 
         return (
           <Pressable
@@ -24,12 +35,23 @@ export default function DaySelector({ days, selectedDate, onSelectDate, daysWith
             style={styles.chipWrapper}
           >
             <Text style={styles.dayLabel}>{formatDayLabel(day)}</Text>
-            <View style={[styles.chip, selected && styles.chipSelected]}>
-              <Text style={[styles.dateNumber, selected && styles.dateNumberSelected]}>
-                {day.getDate()}
-              </Text>
+            <View style={[styles.chip, fullyBlocked && styles.chipBlocked, selected && styles.chipSelected]}>
+              {fullyBlocked ? (
+                <Ionicons
+                  name="lock-closed"
+                  size={16}
+                  color={selected ? colors.surface : colors.blocked}
+                />
+              ) : (
+                <Text style={[styles.dateNumber, selected && styles.dateNumberSelected]}>
+                  {day.getDate()}
+                </Text>
+              )}
             </View>
-            <View style={[styles.dot, hasAppointments && styles.dotVisible]} />
+            <View style={styles.dotsRow}>
+              <View style={[styles.dot, hasAppointments && styles.dotAppointment]} />
+              <View style={[styles.dot, hasBlock && styles.dotBlocked]} />
+            </View>
           </Pressable>
         );
       }}
@@ -60,6 +82,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surface,
   },
+  chipBlocked: {
+    backgroundColor: colors.blockedSurface,
+  },
   chipSelected: {
     backgroundColor: colors.accent,
   },
@@ -71,14 +96,21 @@ const styles = StyleSheet.create({
   dateNumberSelected: {
     color: colors.surface,
   },
+  dotsRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
   dot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    marginTop: 6,
+    marginHorizontal: 2,
     backgroundColor: 'transparent',
   },
-  dotVisible: {
+  dotAppointment: {
     backgroundColor: colors.accent,
+  },
+  dotBlocked: {
+    backgroundColor: colors.blocked,
   },
 });
