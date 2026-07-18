@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import ModalBackdrop from './ModalBackdrop';
 import { colors, spacing, typography } from '../theme';
 
 function toEditableState(service) {
@@ -87,10 +88,14 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
-        <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>{isEditing ? 'Editar masaje' : 'Nuevo masaje'}</Text>
+    <ModalBackdrop visible={visible} onRequestClose={handleClose}>
+      <ScrollView
+        style={styles.sheet}
+        contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+        onStartShouldSetResponder={() => true}
+      >
+        <Text style={styles.title}>{isEditing ? 'Editar masaje' : 'Nuevo masaje'}</Text>
 
           <TextInput
             style={styles.input}
@@ -161,18 +166,12 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
               </Pressable>
             </View>
           </View>
-        </ScrollView>
-      </View>
-    </Modal>
+      </ScrollView>
+    </ModalBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,

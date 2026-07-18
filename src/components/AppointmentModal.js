@@ -1,6 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import ModalBackdrop from './ModalBackdrop';
 import ServicePicker from './ServicePicker';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -100,10 +101,14 @@ export default function AppointmentModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
-        <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>Nueva cita · {date ? formatFullDate(date) : ''}</Text>
+    <ModalBackdrop visible={visible} onRequestClose={handleClose}>
+      <ScrollView
+        style={styles.sheet}
+        contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+        onStartShouldSetResponder={() => true}
+      >
+        <Text style={styles.title}>Nueva cita · {date ? formatFullDate(date) : ''}</Text>
 
           <TextInput
             style={styles.input}
@@ -173,18 +178,12 @@ export default function AppointmentModal({
               <Text style={styles.confirmButtonText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
             </Pressable>
           </View>
-        </ScrollView>
-      </View>
-    </Modal>
+      </ScrollView>
+    </ModalBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,

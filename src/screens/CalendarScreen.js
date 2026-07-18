@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
+import AppointmentDetailModal from '../components/AppointmentDetailModal';
 import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
@@ -42,6 +43,7 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   useEffect(() => {
     const unsubscribeAppointments = onSnapshot(
@@ -195,7 +197,7 @@ export default function CalendarScreen() {
           keyExtractor={(item) => item.data.id}
           renderItem={({ item }) =>
             item.type === 'appointment' ? (
-              <AppointmentCard appointment={item.data} />
+              <AppointmentCard appointment={item.data} onPress={setSelectedAppointment} />
             ) : (
               <BlockCard block={item.data} onDelete={handleDeleteBlock} />
             )
@@ -229,6 +231,11 @@ export default function CalendarScreen() {
         date={selectedDate}
         onClose={() => setBlockModalVisible(false)}
         onConfirm={handleConfirmBlock}
+      />
+
+      <AppointmentDetailModal
+        appointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
       />
     </SafeAreaView>
   );

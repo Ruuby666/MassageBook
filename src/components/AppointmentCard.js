@@ -1,12 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, typography } from '../theme';
 import { formatTime } from '../utils/dateHelpers';
 
-export default function AppointmentCard({ appointment }) {
+export default function AppointmentCard({ appointment, onPress }) {
   const { clientName, phone, address, service, durationMinutes, date, notes } = appointment;
 
   return (
-    <View style={styles.card}>
+    <Pressable style={styles.card} onPress={() => onPress?.(appointment)}>
       <View style={styles.timeColumn}>
         <Text style={styles.time}>{formatTime(date)}</Text>
         <View style={styles.durationBadge}>
@@ -20,7 +20,7 @@ export default function AppointmentCard({ appointment }) {
         <Text style={styles.phone}>{phone}</Text>
         {notes ? <Text style={styles.notes}>{notes}</Text> : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

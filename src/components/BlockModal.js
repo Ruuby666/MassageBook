@@ -1,6 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import ModalBackdrop from './ModalBackdrop';
 import { colors, spacing, typography } from '../theme';
 import { dateToTimeString, formatFullDate, formatTimeString, timeStringToDate } from '../utils/dateHelpers';
 
@@ -58,10 +59,9 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <Text style={styles.title}>Bloquear · {date ? formatFullDate(date) : ''}</Text>
+    <ModalBackdrop visible={visible} onRequestClose={handleClose}>
+      <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+        <Text style={styles.title}>Bloquear · {date ? formatFullDate(date) : ''}</Text>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Todo el día</Text>
@@ -110,18 +110,12 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
               <Text style={styles.confirmButtonText}>{saving ? 'Bloqueando…' : 'Bloquear'}</Text>
             </Pressable>
           </View>
-        </View>
       </View>
-    </Modal>
+    </ModalBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
