@@ -2,6 +2,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { auth } from './src/firebase';
 import CalendarScreen from './src/screens/CalendarScreen';
@@ -20,22 +21,27 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      {checkingAuth ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={colors.accent} size="large" />
-        </View>
-      ) : user ? (
-        <CalendarScreen />
-      ) : (
-        <LoginScreen />
-      )}
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        {checkingAuth ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={colors.accent} size="large" />
+          </View>
+        ) : user ? (
+          <CalendarScreen />
+        ) : (
+          <LoginScreen />
+        )}
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     alignItems: 'center',

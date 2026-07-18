@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import {
   addDoc,
   collection,
@@ -9,14 +10,51 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import FloatingActionButton from '../components/FloatingActionButton';
 import ServiceFormModal from '../components/ServiceFormModal';
 import { db } from '../firebase';
 import { colors, spacing, typography } from '../theme';
+
+function ServiceRow({ item, onOpen, onToggleEnabled }) {
+  const swipeableRef = useRef(null);
+
+  function handleOpen() {
+    swipeableRef.current?.close();
+    onOpen(item);
+  }
+
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={() => (
+        <Pressable style={styles.swipeAction} onPress={handleOpen}>
+          <Ionicons name="create-outline" size={20} color={colors.surface} />
+          <Text style={styles.swipeActionText}>Editar</Text>
+        </Pressable>
+      )}
+      onSwipeableOpen={handleOpen}
+      overshootRight={false}
+    >
+      <Pressable style={styles.card} onPress={handleOpen}>
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardName}>{item.name}</Text>
+          <Text style={styles.cardMeta}>
+            {item.durationMinutes} min · ${item.price}
+          </Text>
+        </View>
+        <Switch
+          value={Boolean(item.enabled)}
+          onValueChange={(value) => onToggleEnabled(item, value)}
+          trackColor={{ true: colors.accent }}
+        />
+      </Pressable>
+    </Swipeable>
+  );
+}
 
 export default function ServicesScreen({ visible, onClose }) {
   const [services, setServices] = useState([]);
@@ -96,19 +134,7 @@ export default function ServicesScreen({ visible, onClose }) {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
-              <Pressable style={styles.card} onPress={() => openEdit(item)}>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardName}>{item.name}</Text>
-                  <Text style={styles.cardMeta}>
-                    {item.durationMinutes} min · ${item.price}
-                  </Text>
-                </View>
-                <Switch
-                  value={Boolean(item.enabled)}
-                  onValueChange={(value) => handleToggleEnabled(item, value)}
-                  trackColor={{ true: colors.accent }}
-                />
-              </Pressable>
+              <ServiceRow item={item} onOpen={openEdit} onToggleEnabled={handleToggleEnabled} />
             )}
           />
         )}
@@ -176,6 +202,21 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontSize: typography.cardMeta,
     color: colors.textSecondary,
+    marginTop: 2,
+  },
+  swipeAction: {
+    backgroundColor: colors.accent,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 84,
+    marginVertical: spacing.xs,
+    marginRight: spacing.lg,
+  },
+  swipeActionText: {
+    color: colors.surface,
+    fontSize: typography.cardMeta,
+    fontWeight: '600',
     marginTop: 2,
   },
   emptyState: {
