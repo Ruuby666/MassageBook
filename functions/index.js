@@ -5,6 +5,7 @@ const {
   ValidationError,
   parseReservation,
   assertFutureDate,
+  applyService,
   getOverlapWindow,
   hasOverlap,
 } = require('./validation');
@@ -14,7 +15,9 @@ const db = getFirestore();
 
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
-// (authenticated). See validation.js for the business rules.
+// (authenticated). See validation.js for the business rules. Duration,
+// display name and price always come from the services catalog doc, never
+// from the client, so a tampered request can't change pricing/duration.
 exports.createReservation = onCall(async (request) => {
   const authenticated = Boolean(request.auth);
 
@@ -22,6 +25,9 @@ exports.createReservation = onCall(async (request) => {
   try {
     reservation = parseReservation(request.data || {}, { authenticated });
     assertFutureDate(reservation.startDate);
+
+    const serviceSnap = await db.collection('services').doc(reservation.serviceId).get();
+    reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw new HttpsError(error.code, error.message);
@@ -29,7 +35,7 @@ exports.createReservation = onCall(async (request) => {
     throw error;
   }
 
-  const { clientName, phone, email, address, service, durationMinutes, notes, startDate } =
+  const { clientName, phone, email, address, serviceId, service, durationMinutes, price, notes, startDate } =
     reservation;
   const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
     startDate,
@@ -61,8 +67,10 @@ exports.createReservation = onCall(async (request) => {
     phone,
     email,
     address,
-    service: service || 'Masaje',
+    serviceId,
+    service,
     durationMinutes,
+    price,
     date: Timestamp.fromDate(startDate),
     notes,
     createdAt: Timestamp.now(),
