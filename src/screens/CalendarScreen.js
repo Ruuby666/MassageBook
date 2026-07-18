@@ -9,8 +9,9 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
 import AppointmentModal from '../components/AppointmentModal';
@@ -18,6 +19,7 @@ import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import DaySelector from '../components/DaySelector';
 import FloatingActionButton from '../components/FloatingActionButton';
+import ServicesScreen from './ServicesScreen';
 import { db, functions } from '../firebase';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -35,9 +37,11 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(days[0]);
   const [appointments, setAppointments] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
+  const [servicesScreenVisible, setServicesScreenVisible] = useState(false);
 
   useEffect(() => {
     const unsubscribeAppointments = onSnapshot(
@@ -67,9 +71,20 @@ export default function CalendarScreen() {
       }
     );
 
+    const unsubscribeServices = onSnapshot(
+      query(collection(db, 'services'), orderBy('name')),
+      (snapshot) => {
+        setServices(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+      },
+      (error) => {
+        Alert.alert('Error', 'No se pudieron cargar los masajes: ' + error.message);
+      }
+    );
+
     return () => {
       unsubscribeAppointments();
       unsubscribeBlocks();
+      unsubscribeServices();
     };
   }, []);
 
@@ -156,7 +171,12 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
+        <Pressable onPress={() => setServicesScreenVisible(true)} hitSlop={12}>
+          <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
+        </Pressable>
+      </View>
       <DaySelector
         days={days}
         selectedDate={selectedDate}
@@ -198,6 +218,7 @@ export default function CalendarScreen() {
       <AppointmentModal
         visible={appointmentModalVisible}
         date={selectedDate}
+        services={services}
         existingAppointments={appointmentsForSelectedDay}
         onClose={() => setAppointmentModalVisible(false)}
         onConfirm={handleConfirmAppointment}
@@ -208,6 +229,11 @@ export default function CalendarScreen() {
         date={selectedDate}
         onClose={() => setBlockModalVisible(false)}
         onConfirm={handleConfirmBlock}
+      />
+
+      <ServicesScreen
+        visible={servicesScreenVisible}
+        onClose={() => setServicesScreenVisible(false)}
       />
     </SafeAreaView>
   );
@@ -222,12 +248,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
   header: {
     fontSize: typography.header,
     fontWeight: '700',
     color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
   },
   listContent: {
     paddingTop: spacing.sm,

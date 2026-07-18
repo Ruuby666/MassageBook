@@ -1,7 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SERVICE_DURATIONS } from '../constants/services';
+import ServicePicker from './ServicePicker';
 import { colors, spacing, typography } from '../theme';
 import {
   dateToTimeString,
@@ -12,15 +12,20 @@ import {
 } from '../utils/dateHelpers';
 
 const DEFAULT_TIME = '09:00';
-const DEFAULT_DURATION = 60;
 
-export default function AppointmentModal({ visible, date, existingAppointments = [], onClose, onConfirm }) {
+export default function AppointmentModal({
+  visible,
+  date,
+  services = [],
+  existingAppointments = [],
+  onClose,
+  onConfirm,
+}) {
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [service, setService] = useState('');
-  const [duration, setDuration] = useState(DEFAULT_DURATION);
+  const [serviceId, setServiceId] = useState(null);
   const [startTime, setStartTime] = useState(DEFAULT_TIME);
   const [notes, setNotes] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -31,8 +36,7 @@ export default function AppointmentModal({ visible, date, existingAppointments =
     setPhone('');
     setEmail('');
     setAddress('');
-    setService('');
-    setDuration(DEFAULT_DURATION);
+    setServiceId(null);
     setStartTime(DEFAULT_TIME);
     setNotes('');
     setShowPicker(false);
@@ -49,8 +53,14 @@ export default function AppointmentModal({ visible, date, existingAppointments =
       return;
     }
 
+    const selectedService = services.find((service) => service.id === serviceId);
+    if (!selectedService) {
+      Alert.alert('Falta el masaje', 'Elige qué masaje le vas a hacer.');
+      return;
+    }
+
     const newStart = timeStringToDate(date, startTime);
-    const newEnd = new Date(newStart.getTime() + duration * 60000);
+    const newEnd = new Date(newStart.getTime() + selectedService.durationMinutes * 60000);
     const overlaps = existingAppointments.some((appointment) => {
       const apptStart = new Date(appointment.date);
       const apptEnd = new Date(apptStart.getTime() + appointment.durationMinutes * 60000);
@@ -71,8 +81,7 @@ export default function AppointmentModal({ visible, date, existingAppointments =
         phone: phone.trim(),
         email: email.trim(),
         address: address.trim(),
-        service: service.trim() || 'Masaje',
-        durationMinutes: duration,
+        serviceId,
         startTime,
         notes: notes.trim(),
       });
@@ -127,33 +136,9 @@ export default function AppointmentModal({ visible, date, existingAppointments =
             value={address}
             onChangeText={setAddress}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Servicio (ej. Masaje relajante)"
-            placeholderTextColor={colors.textSecondary}
-            value={service}
-            onChangeText={setService}
-          />
 
-          <Text style={styles.label}>Duración</Text>
-          <View style={styles.durationRow}>
-            {SERVICE_DURATIONS.map((minutes) => (
-              <Pressable
-                key={minutes}
-                style={[styles.durationChip, duration === minutes && styles.durationChipSelected]}
-                onPress={() => setDuration(minutes)}
-              >
-                <Text
-                  style={[
-                    styles.durationChipText,
-                    duration === minutes && styles.durationChipTextSelected,
-                  ]}
-                >
-                  {minutes} min
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <Text style={styles.label}>Masaje</Text>
+          <ServicePicker services={services} selectedId={serviceId} onSelect={setServiceId} />
 
           <Text style={styles.label}>Hora</Text>
           <Pressable style={styles.timeField} onPress={() => setShowPicker(true)}>
@@ -228,28 +213,6 @@ const styles = StyleSheet.create({
     fontSize: typography.cardBody,
     color: colors.textPrimary,
     marginBottom: spacing.md,
-  },
-  durationRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  durationChip: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginRight: spacing.sm,
-  },
-  durationChipSelected: {
-    backgroundColor: colors.accent,
-  },
-  durationChipText: {
-    fontSize: typography.cardMeta,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  durationChipTextSelected: {
-    color: colors.surface,
   },
   timeField: {
     backgroundColor: colors.background,
