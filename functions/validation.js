@@ -54,12 +54,15 @@ function assertFutureDate(startDate, now = new Date()) {
 
 // serviceData is `snapshot.data()` (or null/undefined if the doc doesn't
 // exist) for the requested serviceId — the caller does the Firestore read,
-// this function just enforces the business rule on the result.
-function applyService(reservation, serviceData) {
+// this function just enforces the business rule on the result. "enabled"
+// only gates the public form — it means "clients can pick this", not
+// "this massage doesn't exist" — the therapist can still book a disabled
+// one herself since she's choosing it directly, not relying on the menu.
+function applyService(reservation, serviceData, { authenticated } = {}) {
   if (!serviceData) {
     throw new ValidationError('invalid-argument', 'Ese tipo de masaje ya no existe.');
   }
-  if (!serviceData.enabled) {
+  if (!authenticated && !serviceData.enabled) {
     throw new ValidationError(
       'failed-precondition',
       'Ese masaje ya no está disponible. Elige otro.'

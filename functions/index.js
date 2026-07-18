@@ -27,7 +27,9 @@ exports.createReservation = onCall(async (request) => {
     assertFutureDate(reservation.startDate);
 
     const serviceSnap = await db.collection('services').doc(reservation.serviceId).get();
-    reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null);
+    reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null, {
+      authenticated,
+    });
   } catch (error) {
     if (error instanceof ValidationError) {
       throw new HttpsError(error.code, error.message);

@@ -106,8 +106,16 @@ describe('applyService', () => {
     expect(() => applyService({}, undefined)).toThrow(ValidationError);
   });
 
-  it('rejects when the service is disabled', () => {
-    expect(() => applyService({}, validService({ enabled: false }))).toThrow(ValidationError);
+  it('rejects a disabled service when unauthenticated (public form)', () => {
+    expect(() =>
+      applyService({}, validService({ enabled: false }), { authenticated: false })
+    ).toThrow(ValidationError);
+  });
+
+  it('allows a disabled service when authenticated (therapist can still book it herself)', () => {
+    expect(() =>
+      applyService({}, validService({ enabled: false }), { authenticated: true })
+    ).not.toThrow();
   });
 
   it.each(SERVICE_DURATIONS)('accepts every fixed duration option (%s min)', (durationMinutes) => {
