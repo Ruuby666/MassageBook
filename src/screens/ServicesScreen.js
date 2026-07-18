@@ -1,0 +1,190 @@
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import FloatingActionButton from '../components/FloatingActionButton';
+import ServiceFormModal from '../components/ServiceFormModal';
+import { db } from '../firebase';
+import { colors, spacing, typography } from '../theme';
+
+export default function ServicesScreen({ visible, onClose }) {
+  const [services, setServices] = useState([]);
+  const [formVisible, setFormVisible] = useState(false);
+  const [editingService, setEditingService] = useState(null);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'services'), orderBy('name')),
+      (snapshot) => {
+        setServices(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+      },
+      (error) => {
+        Alert.alert('Error', 'No se pudieron cargar los masajes: ' + error.message);
+      }
+    );
+
+    return unsubscribe;
+  }, [visible]);
+
+  function openCreate() {
+    setEditingService(null);
+    setFormVisible(true);
+  }
+
+  function openEdit(service) {
+    setEditingService(service);
+    setFormVisible(true);
+  }
+
+  function closeForm() {
+    setFormVisible(false);
+    setEditingService(null);
+  }
+
+  async function handleSaveService(data) {
+    if (editingService) {
+      await updateDoc(doc(db, 'services', editingService.id), data);
+    } else {
+      await addDoc(collection(db, 'services'), { ...data, createdAt: serverTimestamp() });
+    }
+    closeForm();
+  }
+
+  async function handleDeleteService(id) {
+    await deleteDoc(doc(db, 'services', id));
+    closeForm();
+  }
+
+  async function handleToggleEnabled(service, value) {
+    try {
+      await updateDoc(doc(db, 'services', service.id), { enabled: value });
+    } catch (error) {
+      Alert.alert('No se pudo actualizar', error.message);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Masajes</Text>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <Ionicons name="close" size={26} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+
+        {services.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Aún no tienes masajes en tu catálogo</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={services}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <Pressable style={styles.card} onPress={() => openEdit(item)}>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardName}>{item.name}</Text>
+                  <Text style={styles.cardMeta}>
+                    {item.durationMinutes} min · ${item.price}
+                  </Text>
+                </View>
+                <Switch
+                  value={Boolean(item.enabled)}
+                  onValueChange={(value) => handleToggleEnabled(item, value)}
+                  trackColor={{ true: colors.accent }}
+                />
+              </Pressable>
+            )}
+          />
+        )}
+
+        <FloatingActionButton icon="add" onPress={openCreate} />
+
+        <ServiceFormModal
+          visible={formVisible}
+          service={editingService}
+          onClose={closeForm}
+          onConfirm={handleSaveService}
+          onDelete={handleDeleteService}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  title: {
+    fontSize: typography.header,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  listContent: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl + 80,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardInfo: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  cardName: {
+    fontSize: typography.cardTitle,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  cardMeta: {
+    fontSize: typography.cardMeta,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+});
