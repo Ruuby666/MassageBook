@@ -21,6 +21,9 @@ const form = document.getElementById('booking-form');
 const messageEl = document.getElementById('form-message');
 const serviceListEl = document.getElementById('service-list');
 const serviceDetailsEl = document.getElementById('service-details');
+const dateInput = document.getElementById('date-input');
+const timeInput = document.getElementById('time-input');
+const dateAvailabilityEl = document.getElementById('date-availability');
 const reviewModal = document.getElementById('review-modal');
 const reviewListEl = document.getElementById('review-list');
 const reviewEditButton = document.getElementById('review-edit-button');
@@ -29,6 +32,7 @@ const reviewConfirmButton = document.getElementById('review-confirm-button');
 let services = [];
 let selectedServiceId = null;
 let pendingReservation = null;
+let dayFullyBlocked = false;
 
 function setMessage(text, type) {
   messageEl.textContent = text;
@@ -147,9 +151,37 @@ async function loadServices() {
 
 loadServices();
 
+async function checkDateAvailability() {
+  dayFullyBlocked = false;
+  dateAvailabilityEl.hidden = true;
+
+  const date = dateInput.value;
+  if (!date) return;
+
+  try {
+    const snapshot = await getDocs(query(collection(db, 'blocks'), where('date', '==', date)));
+    dayFullyBlocked = snapshot.docs.some((doc) => doc.data().allDay);
+  } catch (error) {
+    dayFullyBlocked = false;
+  }
+
+  if (dayFullyBlocked) {
+    dateAvailabilityEl.textContent = 'Ese día no hay disponibilidad. Elige otra fecha.';
+    dateAvailabilityEl.hidden = false;
+  }
+  timeInput.disabled = dayFullyBlocked;
+}
+
+dateInput.addEventListener('change', checkDateAvailability);
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   setMessage('', '');
+
+  if (dayFullyBlocked) {
+    setMessage('Ese día no hay disponibilidad. Elige otra fecha.', 'error');
+    return;
+  }
 
   if (!selectedServiceId) {
     setMessage('Elige qué masaje quieres.', 'error');

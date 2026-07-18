@@ -170,6 +170,12 @@ button[type='submit']:disabled {
   color: var(--error);
 }
 
+.field-hint {
+  font-size: 13px;
+  color: var(--error);
+  margin: -8px 0 4px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

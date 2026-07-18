@@ -72,6 +72,50 @@ function getLocalMinutesOfDay(date) {
   return hour * 60 + minute;
 }
 
+const dateKeyFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: BUSINESS_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+// Matches the "YYYY-MM-DD" format `blocks.date` is stored as (see
+// toDateKey in the app) so a block can be looked up for a reservation's
+// local calendar day, not the server's or UTC's.
+function getLocalDateKey(date) {
+  const parts = dateKeyFormatter.formatToParts(date);
+  const year = parts.find((part) => part.type === 'year').value;
+  const month = parts.find((part) => part.type === 'month').value;
+  const day = parts.find((part) => part.type === 'day').value;
+  return `${year}-${month}-${day}`;
+}
+
+function timeStringToMinutes(timeString) {
+  const [hour, minute] = timeString.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+// Public form only, same exception as the buffer/business hours/enabled
+// checks — the therapist can still book over her own block from the app.
+// blocksForDay are the `blocks` docs already filtered to this local date.
+function assertNotBlocked(startDate, durationMinutes, blocksForDay, authenticated) {
+  if (authenticated) return;
+
+  const startMinutes = getLocalMinutesOfDay(startDate);
+  const endMinutes = startMinutes + durationMinutes;
+
+  const isBlocked = blocksForDay.some((block) => {
+    if (block.allDay) return true;
+    const blockStart = timeStringToMinutes(block.startTime);
+    const blockEnd = timeStringToMinutes(block.endTime);
+    return startMinutes < blockEnd && blockStart < endMinutes;
+  });
+
+  if (isBlocked) {
+    throw new ValidationError('failed-precondition', 'Ese horario no está disponible. Elige otra hora.');
+  }
+}
+
 // Public form only — the therapist can still book herself outside these
 // hours from the app, same exception pattern as the buffer and `enabled`.
 // Checks both ends of the appointment so a massage starting before 21:00
@@ -149,6 +193,8 @@ module.exports = {
   parseReservation,
   assertFutureDate,
   assertWithinBusinessHours,
+  getLocalDateKey,
+  assertNotBlocked,
   applyService,
   getOverlapWindow,
   hasOverlap,

@@ -14,9 +14,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Availability blocks are only created by the therapist inside the app.
+    // Availability blocks: no PII, just date/time ranges — public read so
+    // the client web form can hide blocked days before submitting (the
+    // Cloud Function is the actual enforcement; this is only the UX hint).
+    // Only the therapist can create/edit them from the app.
     match /blocks/{blockId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create, update, delete: if request.auth != null;
     }
 

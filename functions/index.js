@@ -6,6 +6,8 @@ const {
   parseReservation,
   assertFutureDate,
   assertWithinBusinessHours,
+  getLocalDateKey,
+  assertNotBlocked,
   applyService,
   getOverlapWindow,
   hasOverlap,
@@ -32,6 +34,11 @@ exports.createReservation = onCall(async (request) => {
       authenticated,
     });
     assertWithinBusinessHours(reservation.startDate, reservation.durationMinutes, authenticated);
+
+    const dateKey = getLocalDateKey(reservation.startDate);
+    const blocksSnapshot = await db.collection('blocks').where('date', '==', dateKey).get();
+    const blocksForDay = blocksSnapshot.docs.map((doc) => doc.data());
+    assertNotBlocked(reservation.startDate, reservation.durationMinutes, blocksForDay, authenticated);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw new HttpsError(error.code, error.message);

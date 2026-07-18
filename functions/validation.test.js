@@ -4,6 +4,8 @@ const {
   parseReservation,
   assertFutureDate,
   assertWithinBusinessHours,
+  getLocalDateKey,
+  assertNotBlocked,
   applyService,
   getOverlapWindow,
   hasOverlap,
@@ -183,6 +185,47 @@ describe('assertWithinBusinessHours', () => {
     expect(() => assertWithinBusinessHours(winterNineAm, 60, false)).not.toThrow();
     const winterBeforeOpen = new Date('2026-01-15T07:59:00.000Z'); // 07:59 local (WET)
     expect(() => assertWithinBusinessHours(winterBeforeOpen, 30, false)).toThrow(ValidationError);
+  });
+});
+
+describe('getLocalDateKey', () => {
+  it('returns the Canary Islands local calendar date, not UTC', () => {
+    // 23:30 UTC on the 14th is 00:30 local (WEST, UTC+1) on the 15th.
+    const date = new Date('2026-07-14T23:30:00.000Z');
+    expect(getLocalDateKey(date)).toBe('2026-07-15');
+  });
+
+  it('matches the UTC date when local time is comfortably mid-day', () => {
+    const date = new Date('2026-07-15T12:00:00.000Z'); // 13:00 local
+    expect(getLocalDateKey(date)).toBe('2026-07-15');
+  });
+});
+
+describe('assertNotBlocked', () => {
+  const localNineAm = new Date('2026-07-15T08:00:00.000Z'); // 09:00 local
+
+  it('rejects when the whole day is blocked', () => {
+    const blocks = [{ allDay: true }];
+    expect(() => assertNotBlocked(localNineAm, 60, blocks, false)).toThrow(ValidationError);
+  });
+
+  it('rejects when the appointment overlaps a partial-hour block', () => {
+    const blocks = [{ allDay: false, startTime: '08:30', endTime: '10:00' }];
+    expect(() => assertNotBlocked(localNineAm, 60, blocks, false)).toThrow(ValidationError);
+  });
+
+  it('allows the appointment when it falls outside every block that day', () => {
+    const blocks = [{ allDay: false, startTime: '12:00', endTime: '13:00' }];
+    expect(() => assertNotBlocked(localNineAm, 60, blocks, false)).not.toThrow();
+  });
+
+  it('allows when there are no blocks that day', () => {
+    expect(() => assertNotBlocked(localNineAm, 60, [], false)).not.toThrow();
+  });
+
+  it('does not restrict the therapist booking over her own block from the app', () => {
+    const blocks = [{ allDay: true }];
+    expect(() => assertNotBlocked(localNineAm, 60, blocks, true)).not.toThrow();
   });
 });
 
