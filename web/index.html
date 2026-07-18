@@ -32,20 +32,11 @@
           <input type="text" name="address" required autocomplete="street-address" />
         </label>
 
-        <label>
-          Tipo de masaje
-          <input type="text" name="service" placeholder="Ej. Masaje relajante" />
-        </label>
-
-        <fieldset>
-          <legend>Duración</legend>
-          <div class="duration-options" id="duration-options">
-            <label class="chip"><input type="radio" name="durationMinutes" value="30" /> 30 min</label>
-            <label class="chip"><input type="radio" name="durationMinutes" value="50" /> 50 min</label>
-            <label class="chip"><input type="radio" name="durationMinutes" value="60" checked /> 60 min</label>
-            <label class="chip"><input type="radio" name="durationMinutes" value="90" /> 90 min</label>
-          </div>
-        </fieldset>
+        <div class="field-label">Elige tu masaje</div>
+        <div class="service-list" id="service-list">
+          <p class="service-loading" id="service-loading">Cargando masajes…</p>
+        </div>
+        <div class="service-details" id="service-details" hidden></div>
 
         <label>
           Fecha

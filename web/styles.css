@@ -70,33 +70,20 @@ textarea {
   resize: vertical;
 }
 
-fieldset {
-  border: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-legend {
+.field-label {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 600;
-  padding: 0;
-  margin-bottom: 2px;
+  margin-bottom: -8px;
 }
 
-.duration-options {
+.service-list {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.chip {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+.service-item {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -107,10 +94,48 @@ legend {
   cursor: pointer;
 }
 
-.chip:has(input:checked) {
+.service-item.selected {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--surface);
+}
+
+.service-loading {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.service-details {
+  background: var(--accent-soft);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.service-details h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.service-details p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.service-details .service-meta {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.service-details .service-materials {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-secondary);
 }
 
 button[type='submit'] {
