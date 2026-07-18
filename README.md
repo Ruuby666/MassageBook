@@ -15,12 +15,15 @@ src/
   screens/
     LoginScreen.js         Login con email/contraseña
     CalendarScreen.js      Calendario principal (selector de días + agenda + FABs)
+    ServicesScreen.js      Catálogo de masajes: listar, crear, editar, habilitar/deshabilitar
   components/
     DaySelector.js          Tira horizontal de días con indicadores de citas/bloqueos
     AppointmentCard.js       Tarjeta de una cita en la agenda
     AppointmentModal.js      Modal para crear una cita manualmente
     BlockCard.js              Tarjeta de un bloqueo en la agenda
     BlockModal.js              Modal para bloquear un día completo u horas
+    ServiceFormModal.js        Modal para crear/editar un masaje del catálogo
+    ServicePicker.js            Selector de masaje reutilizable (lista + detalles)
     FloatingActionButton.js    Botón flotante reutilizable (apilable)
   firebase/
     config.js               Config pública del proyecto Firebase (no es secreta)
@@ -44,10 +47,10 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 
 ## Modelo de datos (Firestore)
 
-**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por la Cloud Function `createReservation` (rules bloquean writes directos).
+**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por la Cloud Function `createReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
 ```
-clientName, phone, email, address, service, durationMinutes,
-date (Timestamp), notes, createdAt, reminderSent
+clientName, phone, email, address, serviceId, service, durationMinutes,
+price, date (Timestamp), notes, createdAt, reminderSent
 ```
 
 **`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
@@ -55,9 +58,16 @@ date (Timestamp), notes, createdAt, reminderSent
 date ("YYYY-MM-DD"), allDay (bool), startTime, endTime, reason, createdAt
 ```
 
+**`services`** — catálogo de masajes. Lectura pública (sin PII, lo necesita el formulario del cliente), escritura solo del terapeuta autenticado, directo desde la app.
+```
+name, description, durationMinutes, price, materials, enabled, createdAt
+```
+
 ## Reglas de negocio clave
 
 - Duración de la cita siempre es una de **30, 50, 60 o 90 minutos** — nunca texto libre.
+- El cliente (formulario web) y el terapeuta (app) **eligen el masaje del mismo catálogo** (`services`) en vez de escribir servicio/duración/precio a mano — el servidor toma esos datos del catálogo, no del request.
+- `enabled` en un masaje solo controla si el **cliente** puede elegirlo en el formulario público; el terapeuta puede seguir agendándolo ella misma aunque esté deshabilitado.
 - El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
