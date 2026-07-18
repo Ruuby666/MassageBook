@@ -53,6 +53,7 @@ label {
 
 input[type='text'],
 input[type='tel'],
+input[type='email'],
 input[type='date'],
 input[type='time'],
 textarea {
@@ -167,4 +168,100 @@ button[type='submit']:disabled {
 
 .message.error {
   color: var(--error);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  z-index: 10;
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  background: var(--surface);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  padding: 24px 20px;
+  box-sizing: border-box;
+}
+
+.modal h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.review-list {
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-list dt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.review-list dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-actions button {
+  flex: 1;
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-secondary {
+  background: var(--background);
+  color: var(--text-primary);
+}
+
+.button-primary {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.button-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (min-width: 540px) {
+  .modal-backdrop {
+    align-items: center;
+  }
+
+  .modal {
+    border-radius: 16px;
+  }
 }

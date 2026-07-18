@@ -18,13 +18,17 @@ const db = getFirestore(app);
 const createReservation = httpsCallable(functions, 'createReservation');
 
 const form = document.getElementById('booking-form');
-const submitButton = document.getElementById('submit-button');
 const messageEl = document.getElementById('form-message');
 const serviceListEl = document.getElementById('service-list');
 const serviceDetailsEl = document.getElementById('service-details');
+const reviewModal = document.getElementById('review-modal');
+const reviewListEl = document.getElementById('review-list');
+const reviewEditButton = document.getElementById('review-edit-button');
+const reviewConfirmButton = document.getElementById('review-confirm-button');
 
 let services = [];
 let selectedServiceId = null;
+let pendingReservation = null;
 
 function setMessage(text, type) {
   messageEl.textContent = text;
@@ -86,6 +90,51 @@ function renderServiceList() {
   });
 }
 
+function addReviewRow(label, value) {
+  const row = document.createElement('div');
+
+  const dt = document.createElement('dt');
+  dt.textContent = label;
+  row.appendChild(dt);
+
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  row.appendChild(dd);
+
+  reviewListEl.appendChild(row);
+}
+
+function formatDateTimeDisplay(date, time) {
+  const parsed = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(parsed.getTime())) return `${date} ${time}`;
+  return parsed.toLocaleString('es-MX', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function openReviewModal(reservation, service) {
+  reviewListEl.innerHTML = '';
+  addReviewRow('Nombre', reservation.clientName);
+  addReviewRow('Teléfono', reservation.phone);
+  addReviewRow('Correo', reservation.email);
+  addReviewRow('Dirección', reservation.address);
+  addReviewRow('Masaje', `${service.name} · ${service.durationMinutes} min · $${service.price}`);
+  addReviewRow('Fecha y hora', formatDateTimeDisplay(reservation.date, reservation.time));
+  if (reservation.notes) {
+    addReviewRow('Notas', reservation.notes);
+  }
+  reviewModal.hidden = false;
+}
+
+function closeReviewModal() {
+  reviewModal.hidden = true;
+}
+
 async function loadServices() {
   try {
     const snapshot = await getDocs(query(collection(db, 'services'), where('enabled', '==', true)));
@@ -98,7 +147,7 @@ async function loadServices() {
 
 loadServices();
 
-form.addEventListener('submit', async (event) => {
+form.addEventListener('submit', (event) => {
   event.preventDefault();
   setMessage('', '');
 
@@ -121,9 +170,23 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
+  const service = services.find((item) => item.id === selectedServiceId);
+
+  pendingReservation = { clientName, phone, email, address, notes, date, time };
+  openReviewModal(pendingReservation, service);
+});
+
+reviewEditButton.addEventListener('click', () => {
+  closeReviewModal();
+});
+
+reviewConfirmButton.addEventListener('click', async () => {
+  if (!pendingReservation) return;
+
+  const { clientName, phone, email, address, notes, date, time } = pendingReservation;
   const isoDate = new Date(`${date}T${time}:00`).toISOString();
 
-  submitButton.disabled = true;
+  reviewConfirmButton.disabled = true;
   setMessage('Guardando tu reserva...', '');
 
   try {
@@ -136,14 +199,17 @@ form.addEventListener('submit', async (event) => {
       date: isoDate,
       notes,
     });
+    closeReviewModal();
+    pendingReservation = null;
     form.reset();
     selectedServiceId = null;
     renderServiceList();
     renderServiceDetails(null);
     setMessage('¡Listo! Tu cita quedó reservada. Te llegará un recordatorio por correo.', 'success');
   } catch (error) {
+    closeReviewModal();
     setMessage(error.message || 'No se pudo guardar la reserva. Intenta de nuevo.', 'error');
   } finally {
-    submitButton.disabled = false;
+    reviewConfirmButton.disabled = false;
   }
 });
