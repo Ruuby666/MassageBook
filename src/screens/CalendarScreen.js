@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -44,17 +45,28 @@ export default function CalendarScreen() {
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const appointmentsQuery = useMemo(() => query(collection(db, 'reservations'), orderBy('date')), []);
+  const blocksQuery = useMemo(() => collection(db, 'blocks'), []);
+  const servicesQuery = useMemo(() => query(collection(db, 'services'), orderBy('name')), []);
+
+  function toAppointments(snapshot) {
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return { id: docSnap.id, ...data, date: data.date.toDate() };
+    });
+  }
+
+  function toDocs(snapshot) {
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  }
 
   useEffect(() => {
     const unsubscribeAppointments = onSnapshot(
-      query(collection(db, 'reservations'), orderBy('date')),
+      appointmentsQuery,
       (snapshot) => {
-        setAppointments(
-          snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            return { id: docSnap.id, ...data, date: data.date.toDate() };
-          })
-        );
+        setAppointments(toAppointments(snapshot));
         setLoading(false);
       },
       (error) => {
@@ -64,20 +76,16 @@ export default function CalendarScreen() {
     );
 
     const unsubscribeBlocks = onSnapshot(
-      collection(db, 'blocks'),
-      (snapshot) => {
-        setBlocks(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
-      },
+      blocksQuery,
+      (snapshot) => setBlocks(toDocs(snapshot)),
       (error) => {
         Alert.alert('Error', 'No se pudieron cargar los bloqueos: ' + error.message);
       }
     );
 
     const unsubscribeServices = onSnapshot(
-      query(collection(db, 'services'), orderBy('name')),
-      (snapshot) => {
-        setServices(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
-      },
+      servicesQuery,
+      (snapshot) => setServices(toDocs(snapshot)),
       (error) => {
         Alert.alert('Error', 'No se pudieron cargar los masajes: ' + error.message);
       }
@@ -88,7 +96,25 @@ export default function CalendarScreen() {
       unsubscribeBlocks();
       unsubscribeServices();
     };
-  }, []);
+  }, [appointmentsQuery, blocksQuery, servicesQuery]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const [appointmentsSnap, blocksSnap, servicesSnap] = await Promise.all([
+        getDocs(appointmentsQuery),
+        getDocs(blocksQuery),
+        getDocs(servicesQuery),
+      ]);
+      setAppointments(toAppointments(appointmentsSnap));
+      setBlocks(toDocs(blocksSnap));
+      setServices(toDocs(servicesSnap));
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar: ' + error.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const daysWithAppointments = useMemo(() => {
     const set = new Set();
@@ -175,9 +201,18 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
-        <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
-          <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={handleRefresh} disabled={refreshing} hitSlop={12}>
+            {refreshing ? (
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+            ) : (
+              <Ionicons name="reload-outline" size={22} color={colors.textPrimary} />
+            )}
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
+            <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
       </View>
       <DaySelector
         days={days}
@@ -187,24 +222,25 @@ export default function CalendarScreen() {
         blockedDays={blockedDays}
         fullyBlockedDays={fullyBlockedDays}
       />
-      {itemsForSelectedDay.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No tienes citas ni bloqueos este día</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={itemsForSelectedDay}
-          keyExtractor={(item) => item.data.id}
-          renderItem={({ item }) =>
-            item.type === 'appointment' ? (
-              <AppointmentCard appointment={item.data} onPress={setSelectedAppointment} />
-            ) : (
-              <BlockCard block={item.data} onDelete={handleDeleteBlock} />
-            )
-          }
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <FlatList
+        data={itemsForSelectedDay}
+        keyExtractor={(item) => item.data.id}
+        renderItem={({ item }) =>
+          item.type === 'appointment' ? (
+            <AppointmentCard appointment={item.data} onPress={setSelectedAppointment} />
+          ) : (
+            <BlockCard block={item.data} onDelete={handleDeleteBlock} />
+          )
+        }
+        contentContainerStyle={
+          itemsForSelectedDay.length === 0 ? styles.emptyListContent : styles.listContent
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No tienes citas ni bloqueos este día</Text>
+          </View>
+        }
+      />
 
       <FloatingActionButton
         icon="add"
@@ -262,9 +298,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
   listContent: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl + 128,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   emptyState: {
     flex: 1,
