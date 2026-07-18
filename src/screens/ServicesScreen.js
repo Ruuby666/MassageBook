@@ -117,7 +117,11 @@ export default function ServicesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.navigate('Calendario')} hitSlop={12}>
+        <Pressable
+          onPress={() => navigation.navigate('Calendario')}
+          hitSlop={12}
+          testID="back-button"
+        >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </Pressable>
       </View>
@@ -137,7 +141,7 @@ export default function ServicesScreen() {
         />
       )}
 
-      <FloatingActionButton icon="add" onPress={openCreate} />
+      <FloatingActionButton icon="add" onPress={openCreate} testID="fab" />
 
       <ServiceFormModal
         visible={formVisible}

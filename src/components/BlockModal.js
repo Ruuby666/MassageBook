@@ -65,7 +65,12 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Todo el día</Text>
-            <Switch value={allDay} onValueChange={setAllDay} trackColor={{ true: colors.accent }} />
+            <Switch
+              value={allDay}
+              onValueChange={setAllDay}
+              trackColor={{ true: colors.accent }}
+              testID="all-day-switch"
+            />
           </View>
 
           {!allDay && (
