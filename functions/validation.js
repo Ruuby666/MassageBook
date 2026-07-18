@@ -1,7 +1,6 @@
 // Pure validation/overlap logic for createReservation, kept free of any
 // Firestore or firebase-functions dependency so it can be unit tested
-// without mocking the Admin SDK. Keep SERVICE_DURATIONS in sync with
-// src/constants/services.js in the Expo app.
+// without mocking the Admin SDK.
 const SERVICE_DURATIONS = [30, 50, 60, 90];
 const BUFFER_MINUTES = 30;
 const QUERY_MARGIN_HOURS = 4;
@@ -13,13 +12,15 @@ class ValidationError extends Error {
   }
 }
 
+// Duration/name/price are no longer trusted from the client — they come
+// from the services catalog (see applyService) so a client can't tamper
+// with pricing or duration by editing the request payload.
 function parseReservation(data, { authenticated }) {
   const clientName = String(data.clientName || '').trim();
   const phone = String(data.phone || '').trim();
   const email = String(data.email || '').trim();
   const address = String(data.address || '').trim();
-  const service = String(data.service || '').trim();
-  const durationMinutes = Number(data.durationMinutes);
+  const serviceId = String(data.serviceId || '').trim();
   const notes = String(data.notes || '').trim();
 
   if (!clientName) {
@@ -33,11 +34,8 @@ function parseReservation(data, { authenticated }) {
   if (!authenticated && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new ValidationError('invalid-argument', 'Ingresa un correo válido para tu recordatorio.');
   }
-  if (!SERVICE_DURATIONS.includes(durationMinutes)) {
-    throw new ValidationError(
-      'invalid-argument',
-      `La duración debe ser una de: ${SERVICE_DURATIONS.join(', ')} minutos.`
-    );
+  if (!serviceId) {
+    throw new ValidationError('invalid-argument', 'Selecciona un tipo de masaje.');
   }
 
   const startDate = new Date(data.date);
@@ -45,13 +43,34 @@ function parseReservation(data, { authenticated }) {
     throw new ValidationError('invalid-argument', 'La fecha/hora no es válida.');
   }
 
-  return { clientName, phone, email, address, service, durationMinutes, notes, startDate };
+  return { clientName, phone, email, address, serviceId, notes, startDate };
 }
 
 function assertFutureDate(startDate, now = new Date()) {
   if (startDate.getTime() <= now.getTime()) {
     throw new ValidationError('invalid-argument', 'La fecha debe ser en el futuro.');
   }
+}
+
+// serviceData is `snapshot.data()` (or null/undefined if the doc doesn't
+// exist) for the requested serviceId — the caller does the Firestore read,
+// this function just enforces the business rule on the result.
+function applyService(reservation, serviceData) {
+  if (!serviceData) {
+    throw new ValidationError('invalid-argument', 'Ese tipo de masaje ya no existe.');
+  }
+  if (!serviceData.enabled) {
+    throw new ValidationError(
+      'failed-precondition',
+      'Ese masaje ya no está disponible. Elige otro.'
+    );
+  }
+  return {
+    ...reservation,
+    service: serviceData.name,
+    durationMinutes: serviceData.durationMinutes,
+    price: typeof serviceData.price === 'number' ? serviceData.price : null,
+  };
 }
 
 // Unauthenticated (public form) calls get a 30-min buffer on both sides;
@@ -87,6 +106,7 @@ module.exports = {
   ValidationError,
   parseReservation,
   assertFutureDate,
+  applyService,
   getOverlapWindow,
   hasOverlap,
 };

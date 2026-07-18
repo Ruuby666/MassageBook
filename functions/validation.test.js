@@ -4,6 +4,7 @@ const {
   ValidationError,
   parseReservation,
   assertFutureDate,
+  applyService,
   getOverlapWindow,
   hasOverlap,
 } = require('./validation');
@@ -14,10 +15,21 @@ function validPayload(overrides = {}) {
     phone: '5512345678',
     email: 'maria@example.com',
     address: 'Av. Reforma 123',
-    service: 'Masaje relajante',
-    durationMinutes: 60,
+    serviceId: 'svc-relajante',
     date: '2099-01-01T09:00:00.000Z',
     notes: '',
+    ...overrides,
+  };
+}
+
+function validService(overrides = {}) {
+  return {
+    name: 'Masaje relajante',
+    description: 'Masaje suave para liberar tensión.',
+    durationMinutes: 60,
+    price: 800,
+    materials: 'Aceite esencial de lavanda',
+    enabled: true,
     ...overrides,
   };
 }
@@ -26,7 +38,7 @@ describe('parseReservation', () => {
   it('accepts a fully valid unauthenticated payload', () => {
     const result = parseReservation(validPayload(), { authenticated: false });
     expect(result.clientName).toBe('María López');
-    expect(result.durationMinutes).toBe(60);
+    expect(result.serviceId).toBe('svc-relajante');
     expect(result.startDate).toBeInstanceOf(Date);
   });
 
@@ -51,16 +63,10 @@ describe('parseReservation', () => {
     );
   });
 
-  it.each([25, 45, 0, 120, NaN])('rejects an invalid duration (%s)', (durationMinutes) => {
+  it('rejects a missing serviceId', () => {
     expect(() =>
-      parseReservation(validPayload({ durationMinutes }), { authenticated: false })
+      parseReservation(validPayload({ serviceId: '' }), { authenticated: false })
     ).toThrow(ValidationError);
-  });
-
-  it.each(SERVICE_DURATIONS)('accepts every fixed duration option (%s min)', (durationMinutes) => {
-    expect(() =>
-      parseReservation(validPayload({ durationMinutes }), { authenticated: false })
-    ).not.toThrow();
   });
 
   it('rejects an unparseable date', () => {
@@ -83,10 +89,35 @@ describe('parseReservation', () => {
       parseReservation(validPayload({ email: '' }), { authenticated: true })
     ).not.toThrow();
   });
+});
 
-  it('defaults service to empty string when omitted, leaving the caller to fall back', () => {
-    const result = parseReservation(validPayload({ service: undefined }), { authenticated: true });
-    expect(result.service).toBe('');
+describe('applyService', () => {
+  it('merges the service name, duration and price into the reservation', () => {
+    const reservation = { clientName: 'María López' };
+    const result = applyService(reservation, validService());
+    expect(result.clientName).toBe('María López');
+    expect(result.service).toBe('Masaje relajante');
+    expect(result.durationMinutes).toBe(60);
+    expect(result.price).toBe(800);
+  });
+
+  it('rejects when the service does not exist', () => {
+    expect(() => applyService({}, null)).toThrow(ValidationError);
+    expect(() => applyService({}, undefined)).toThrow(ValidationError);
+  });
+
+  it('rejects when the service is disabled', () => {
+    expect(() => applyService({}, validService({ enabled: false }))).toThrow(ValidationError);
+  });
+
+  it.each(SERVICE_DURATIONS)('accepts every fixed duration option (%s min)', (durationMinutes) => {
+    const result = applyService({}, validService({ durationMinutes }));
+    expect(result.durationMinutes).toBe(durationMinutes);
+  });
+
+  it('falls back to null price when the service has no numeric price', () => {
+    const result = applyService({}, validService({ price: undefined }));
+    expect(result.price).toBeNull();
   });
 });
 
