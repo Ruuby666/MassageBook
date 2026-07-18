@@ -71,7 +71,7 @@ name, description, durationMinutes, price, materials, enabled, createdAt
 - El cliente (formulario web) y el terapeuta (app) **eligen el masaje del mismo catálogo** (`services`) en vez de escribir servicio/duración/precio a mano — el servidor toma esos datos del catálogo, no del request.
 - `enabled` en un masaje solo controla si el **cliente** puede elegirlo en el formulario público; el terapeuta puede seguir agendándolo ella misma aunque esté deshabilitado.
 - El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.
-- El **formulario web** solo permite reservar entre **8:00 a.m. y 9:00 p.m.** (hora de Ciudad de México); el masaje tampoco puede terminar después de las 9:00 p.m. La terapeuta puede seguir agendando fuera de ese horario desde la app si lo necesita.
+- El **formulario web** solo permite reservar entre **8:00 a.m. y 9:00 p.m.** (hora de Canarias); el masaje tampoco puede terminar después de las 9:00 p.m. La terapeuta puede seguir agendando fuera de ese horario desde la app si lo necesita.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
 

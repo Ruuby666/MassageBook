@@ -150,31 +150,39 @@ describe('assertFutureDate', () => {
 });
 
 describe('assertWithinBusinessHours', () => {
-  // Fixture times are given in UTC but written as the Mexico City
-  // (UTC-6) local wall-clock time they represent, so UTC = local + 6h.
+  // Fixture times are given in UTC but written as the Canary Islands
+  // local wall-clock time they represent. July falls in EU daylight
+  // saving, so the Canaries run WEST (UTC+1): UTC = local - 1h.
   it('allows a start time comfortably inside 8:00-21:00 local', () => {
-    const localNineAm = new Date('2026-07-15T15:00:00.000Z');
+    const localNineAm = new Date('2026-07-15T08:00:00.000Z'); // 09:00 local
     expect(() => assertWithinBusinessHours(localNineAm, 60, false)).not.toThrow();
   });
 
   it('rejects a start time before 8:00 local when unauthenticated', () => {
-    const localBeforeOpen = new Date('2026-07-15T13:59:00.000Z');
+    const localBeforeOpen = new Date('2026-07-15T06:59:00.000Z'); // 07:59 local
     expect(() => assertWithinBusinessHours(localBeforeOpen, 30, false)).toThrow(ValidationError);
   });
 
   it('rejects an appointment that would end after 21:00 local when unauthenticated', () => {
-    const localEightPm = new Date('2026-07-16T02:00:00.000Z'); // 20:00 local
+    const localEightPm = new Date('2026-07-15T19:00:00.000Z'); // 20:00 local
     expect(() => assertWithinBusinessHours(localEightPm, 90, false)).toThrow(ValidationError);
   });
 
   it('allows an appointment that ends exactly at 21:00 local', () => {
-    const localEightPm = new Date('2026-07-16T02:00:00.000Z'); // 20:00 local
+    const localEightPm = new Date('2026-07-15T19:00:00.000Z'); // 20:00 local
     expect(() => assertWithinBusinessHours(localEightPm, 60, false)).not.toThrow();
   });
 
   it('does not restrict hours when authenticated (therapist manual entry)', () => {
-    const localMidnight = new Date('2026-07-16T06:00:00.000Z'); // 00:00 local
+    const localMidnight = new Date('2026-07-14T23:00:00.000Z'); // 00:00 local (Jul 15)
     expect(() => assertWithinBusinessHours(localMidnight, 60, true)).not.toThrow();
+  });
+
+  it('accounts for winter time (WET, UTC+0) as well as summer (WEST, UTC+1)', () => {
+    const winterNineAm = new Date('2026-01-15T09:00:00.000Z'); // 09:00 local (WET)
+    expect(() => assertWithinBusinessHours(winterNineAm, 60, false)).not.toThrow();
+    const winterBeforeOpen = new Date('2026-01-15T07:59:00.000Z'); // 07:59 local (WET)
+    expect(() => assertWithinBusinessHours(winterBeforeOpen, 30, false)).toThrow(ValidationError);
   });
 });
 

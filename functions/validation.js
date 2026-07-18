@@ -3,10 +3,11 @@
 // without mocking the Admin SDK.
 const BUFFER_MINUTES = 30;
 const QUERY_MARGIN_HOURS = 4;
-// The business operates in Mexico City, which has used a fixed UTC-6
-// offset year-round since Mexico dropped DST in 2022 — safe to hardcode
-// rather than doing server-local-time math (server tz != business tz).
-const BUSINESS_TIMEZONE_UTC_OFFSET_HOURS = -6;
+// The business operates in the Canary Islands (WET/WEST), which observes
+// EU daylight saving — unlike a fixed-offset zone, a hardcoded UTC offset
+// would be wrong for half the year, so business hours are computed via
+// Intl with the IANA zone instead of manual offset math.
+const BUSINESS_TIMEZONE = 'Atlantic/Canary';
 const BUSINESS_HOURS_START = 8;
 const BUSINESS_HOURS_END = 21;
 
@@ -57,6 +58,20 @@ function assertFutureDate(startDate, now = new Date()) {
   }
 }
 
+const businessHoursFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: BUSINESS_TIMEZONE,
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h23',
+});
+
+function getLocalMinutesOfDay(date) {
+  const parts = businessHoursFormatter.formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour').value);
+  const minute = Number(parts.find((part) => part.type === 'minute').value);
+  return hour * 60 + minute;
+}
+
 // Public form only — the therapist can still book herself outside these
 // hours from the app, same exception pattern as the buffer and `enabled`.
 // Checks both ends of the appointment so a massage starting before 21:00
@@ -64,9 +79,7 @@ function assertFutureDate(startDate, now = new Date()) {
 function assertWithinBusinessHours(startDate, durationMinutes, authenticated) {
   if (authenticated) return;
 
-  const utcMinutes = startDate.getUTCHours() * 60 + startDate.getUTCMinutes();
-  const startMinutes =
-    (((utcMinutes + BUSINESS_TIMEZONE_UTC_OFFSET_HOURS * 60) % 1440) + 1440) % 1440;
+  const startMinutes = getLocalMinutesOfDay(startDate);
   const endMinutes = startMinutes + durationMinutes;
 
   if (startMinutes < BUSINESS_HOURS_START * 60 || endMinutes > BUSINESS_HOURS_END * 60) {
