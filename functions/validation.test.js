@@ -3,6 +3,7 @@ const {
   ValidationError,
   parseReservation,
   assertFutureDate,
+  assertWithinBusinessHours,
   applyService,
   getOverlapWindow,
   hasOverlap,
@@ -145,6 +146,35 @@ describe('assertFutureDate', () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const future = new Date(now.getTime() + 60000);
     expect(() => assertFutureDate(future, now)).not.toThrow();
+  });
+});
+
+describe('assertWithinBusinessHours', () => {
+  // Fixture times are given in UTC but written as the Mexico City
+  // (UTC-6) local wall-clock time they represent, so UTC = local + 6h.
+  it('allows a start time comfortably inside 8:00-21:00 local', () => {
+    const localNineAm = new Date('2026-07-15T15:00:00.000Z');
+    expect(() => assertWithinBusinessHours(localNineAm, 60, false)).not.toThrow();
+  });
+
+  it('rejects a start time before 8:00 local when unauthenticated', () => {
+    const localBeforeOpen = new Date('2026-07-15T13:59:00.000Z');
+    expect(() => assertWithinBusinessHours(localBeforeOpen, 30, false)).toThrow(ValidationError);
+  });
+
+  it('rejects an appointment that would end after 21:00 local when unauthenticated', () => {
+    const localEightPm = new Date('2026-07-16T02:00:00.000Z'); // 20:00 local
+    expect(() => assertWithinBusinessHours(localEightPm, 90, false)).toThrow(ValidationError);
+  });
+
+  it('allows an appointment that ends exactly at 21:00 local', () => {
+    const localEightPm = new Date('2026-07-16T02:00:00.000Z'); // 20:00 local
+    expect(() => assertWithinBusinessHours(localEightPm, 60, false)).not.toThrow();
+  });
+
+  it('does not restrict hours when authenticated (therapist manual entry)', () => {
+    const localMidnight = new Date('2026-07-16T06:00:00.000Z'); // 00:00 local
+    expect(() => assertWithinBusinessHours(localMidnight, 60, true)).not.toThrow();
   });
 });
 

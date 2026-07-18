@@ -3,6 +3,12 @@
 // without mocking the Admin SDK.
 const BUFFER_MINUTES = 30;
 const QUERY_MARGIN_HOURS = 4;
+// The business operates in Mexico City, which has used a fixed UTC-6
+// offset year-round since Mexico dropped DST in 2022 — safe to hardcode
+// rather than doing server-local-time math (server tz != business tz).
+const BUSINESS_TIMEZONE_UTC_OFFSET_HOURS = -6;
+const BUSINESS_HOURS_START = 8;
+const BUSINESS_HOURS_END = 21;
 
 class ValidationError extends Error {
   constructor(code, message) {
@@ -48,6 +54,26 @@ function parseReservation(data, { authenticated }) {
 function assertFutureDate(startDate, now = new Date()) {
   if (startDate.getTime() <= now.getTime()) {
     throw new ValidationError('invalid-argument', 'La fecha debe ser en el futuro.');
+  }
+}
+
+// Public form only — the therapist can still book herself outside these
+// hours from the app, same exception pattern as the buffer and `enabled`.
+// Checks both ends of the appointment so a massage starting before 21:00
+// can't run past it.
+function assertWithinBusinessHours(startDate, durationMinutes, authenticated) {
+  if (authenticated) return;
+
+  const utcMinutes = startDate.getUTCHours() * 60 + startDate.getUTCMinutes();
+  const startMinutes =
+    (((utcMinutes + BUSINESS_TIMEZONE_UTC_OFFSET_HOURS * 60) % 1440) + 1440) % 1440;
+  const endMinutes = startMinutes + durationMinutes;
+
+  if (startMinutes < BUSINESS_HOURS_START * 60 || endMinutes > BUSINESS_HOURS_END * 60) {
+    throw new ValidationError(
+      'invalid-argument',
+      'Solo se puede reservar entre las 8:00 a.m. y las 9:00 p.m.'
+    );
   }
 }
 
@@ -104,9 +130,12 @@ function hasOverlap(rangeStart, rangeEnd, existingReservations) {
 module.exports = {
   BUFFER_MINUTES,
   QUERY_MARGIN_HOURS,
+  BUSINESS_HOURS_START,
+  BUSINESS_HOURS_END,
   ValidationError,
   parseReservation,
   assertFutureDate,
+  assertWithinBusinessHours,
   applyService,
   getOverlapWindow,
   hasOverlap,

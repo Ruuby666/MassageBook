@@ -5,6 +5,7 @@ const {
   ValidationError,
   parseReservation,
   assertFutureDate,
+  assertWithinBusinessHours,
   applyService,
   getOverlapWindow,
   hasOverlap,
@@ -30,6 +31,7 @@ exports.createReservation = onCall(async (request) => {
     reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null, {
       authenticated,
     });
+    assertWithinBusinessHours(reservation.startDate, reservation.durationMinutes, authenticated);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw new HttpsError(error.code, error.message);
