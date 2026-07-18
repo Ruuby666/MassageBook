@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +20,6 @@ import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import DaySelector from '../components/DaySelector';
 import FloatingActionButton from '../components/FloatingActionButton';
-import ServicesScreen from './ServicesScreen';
 import { db, functions } from '../firebase';
 import { colors, spacing, typography } from '../theme';
 import {
@@ -33,6 +33,7 @@ import {
 const createReservation = httpsCallable(functions, 'createReservation');
 
 export default function CalendarScreen() {
+  const navigation = useNavigation();
   const days = useMemo(() => buildDayWindow(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(days[0]);
   const [appointments, setAppointments] = useState([]);
@@ -41,7 +42,6 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
-  const [servicesScreenVisible, setServicesScreenVisible] = useState(false);
 
   useEffect(() => {
     const unsubscribeAppointments = onSnapshot(
@@ -173,7 +173,7 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
-        <Pressable onPress={() => setServicesScreenVisible(true)} hitSlop={12}>
+        <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
           <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
         </Pressable>
       </View>
@@ -229,11 +229,6 @@ export default function CalendarScreen() {
         date={selectedDate}
         onClose={() => setBlockModalVisible(false)}
         onConfirm={handleConfirmBlock}
-      />
-
-      <ServicesScreen
-        visible={servicesScreenVisible}
-        onClose={() => setServicesScreenVisible(false)}
       />
     </SafeAreaView>
   );

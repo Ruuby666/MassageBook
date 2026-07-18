@@ -11,7 +11,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingActionButton from '../components/FloatingActionButton';
@@ -56,14 +56,12 @@ function ServiceRow({ item, onOpen, onToggleEnabled }) {
   );
 }
 
-export default function ServicesScreen({ visible, onClose }) {
+export default function ServicesScreen() {
   const [services, setServices] = useState([]);
   const [formVisible, setFormVisible] = useState(false);
   const [editingService, setEditingService] = useState(null);
 
   useEffect(() => {
-    if (!visible) return undefined;
-
     const unsubscribe = onSnapshot(
       query(collection(db, 'services'), orderBy('name')),
       (snapshot) => {
@@ -75,7 +73,7 @@ export default function ServicesScreen({ visible, onClose }) {
     );
 
     return unsubscribe;
-  }, [visible]);
+  }, []);
 
   function openCreate() {
     setEditingService(null);
@@ -115,41 +113,32 @@ export default function ServicesScreen({ visible, onClose }) {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Masajes</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Ionicons name="close" size={26} color={colors.textPrimary} />
-          </Pressable>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {services.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Aún no tienes masajes en tu catálogo</Text>
         </View>
-
-        {services.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Aún no tienes masajes en tu catálogo</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={services}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <ServiceRow item={item} onOpen={openEdit} onToggleEnabled={handleToggleEnabled} />
-            )}
-          />
-        )}
-
-        <FloatingActionButton icon="add" onPress={openCreate} />
-
-        <ServiceFormModal
-          visible={formVisible}
-          service={editingService}
-          onClose={closeForm}
-          onConfirm={handleSaveService}
-          onDelete={handleDeleteService}
+      ) : (
+        <FlatList
+          data={services}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <ServiceRow item={item} onOpen={openEdit} onToggleEnabled={handleToggleEnabled} />
+          )}
         />
-      </SafeAreaView>
-    </Modal>
+      )}
+
+      <FloatingActionButton icon="add" onPress={openCreate} />
+
+      <ServiceFormModal
+        visible={formVisible}
+        service={editingService}
+        onClose={closeForm}
+        onConfirm={handleSaveService}
+        onDelete={handleDeleteService}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -157,19 +146,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  title: {
-    fontSize: typography.header,
-    fontWeight: '700',
-    color: colors.textPrimary,
   },
   listContent: {
     paddingTop: spacing.sm,
