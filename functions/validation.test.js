@@ -1,5 +1,4 @@
 const {
-  SERVICE_DURATIONS,
   BUFFER_MINUTES,
   ValidationError,
   parseReservation,
@@ -118,7 +117,7 @@ describe('applyService', () => {
     ).not.toThrow();
   });
 
-  it.each(SERVICE_DURATIONS)('accepts every fixed duration option (%s min)', (durationMinutes) => {
+  it.each([15, 45, 75, 120])('accepts any therapist-set duration (%s min)', (durationMinutes) => {
     const result = applyService({}, validService({ durationMinutes }));
     expect(result.durationMinutes).toBe(durationMinutes);
   });

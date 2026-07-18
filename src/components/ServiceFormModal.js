@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { SERVICE_DURATIONS } from '../constants/services';
 import { colors, spacing, typography } from '../theme';
-
-const DEFAULT_DURATION = 60;
 
 function toEditableState(service) {
   return {
     name: service?.name || '',
     description: service?.description || '',
-    durationMinutes: service?.durationMinutes || DEFAULT_DURATION,
+    durationMinutes: service ? String(service.durationMinutes ?? '') : '',
     price: service ? String(service.price ?? '') : '',
     materials: service?.materials || '',
     enabled: service ? Boolean(service.enabled) : true,
@@ -37,9 +34,14 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
   async function handleConfirm() {
     const name = form.name.trim();
     const price = Number(form.price);
+    const durationMinutes = Number(form.durationMinutes);
 
     if (!name) {
       Alert.alert('Falta el nombre', 'Ponle un nombre al masaje.');
+      return;
+    }
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+      Alert.alert('Duración inválida', 'Ingresa la duración en minutos (un número mayor a cero).');
       return;
     }
     if (!Number.isFinite(price) || price <= 0) {
@@ -52,7 +54,7 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
       await onConfirm({
         name,
         description: form.description.trim(),
-        durationMinutes: form.durationMinutes,
+        durationMinutes,
         price,
         materials: form.materials.trim(),
         enabled: form.enabled,
@@ -106,22 +108,14 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
             onChangeText={(value) => update('description', value)}
           />
 
-          <Text style={styles.label}>Duración</Text>
-          <View style={styles.chipRow}>
-            {SERVICE_DURATIONS.map((minutes) => (
-              <Pressable
-                key={minutes}
-                style={[styles.chip, form.durationMinutes === minutes && styles.chipSelected]}
-                onPress={() => update('durationMinutes', minutes)}
-              >
-                <Text
-                  style={[styles.chipText, form.durationMinutes === minutes && styles.chipTextSelected]}
-                >
-                  {minutes} min
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Duración (minutos)"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="numeric"
+            value={form.durationMinutes}
+            onChangeText={(value) => update('durationMinutes', value)}
+          />
 
           <TextInput
             style={styles.input}
@@ -195,11 +189,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: spacing.lg,
   },
-  label: {
-    fontSize: typography.cardMeta,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
   input: {
     backgroundColor: colors.background,
     borderRadius: 10,
@@ -211,30 +200,6 @@ const styles = StyleSheet.create({
   multiline: {
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: spacing.md,
-  },
-  chip: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  chipSelected: {
-    backgroundColor: colors.accent,
-  },
-  chipText: {
-    fontSize: typography.cardMeta,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  chipTextSelected: {
-    color: colors.surface,
   },
   row: {
     flexDirection: 'row',

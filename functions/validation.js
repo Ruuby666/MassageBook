@@ -1,7 +1,6 @@
 // Pure validation/overlap logic for createReservation, kept free of any
 // Firestore or firebase-functions dependency so it can be unit tested
 // without mocking the Admin SDK.
-const SERVICE_DURATIONS = [30, 50, 60, 90];
 const BUFFER_MINUTES = 30;
 const QUERY_MARGIN_HOURS = 4;
 
@@ -103,7 +102,6 @@ function hasOverlap(rangeStart, rangeEnd, existingReservations) {
 }
 
 module.exports = {
-  SERVICE_DURATIONS,
   BUFFER_MINUTES,
   QUERY_MARGIN_HOURS,
   ValidationError,

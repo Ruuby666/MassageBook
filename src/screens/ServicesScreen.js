@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import {
   addDoc,
   collection,
@@ -57,6 +58,7 @@ function ServiceRow({ item, onOpen, onToggleEnabled }) {
 }
 
 export default function ServicesScreen() {
+  const navigation = useNavigation();
   const [services, setServices] = useState([]);
   const [formVisible, setFormVisible] = useState(false);
   const [editingService, setEditingService] = useState(null);
@@ -114,6 +116,12 @@ export default function ServicesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.navigate('Calendario')} hitSlop={12}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </Pressable>
+      </View>
+
       {services.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Aún no tienes masajes en tu catálogo</Text>
@@ -146,6 +154,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   listContent: {
     paddingTop: spacing.sm,

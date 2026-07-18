@@ -10,7 +10,10 @@ Diseñado para vivir dentro de las capas gratuitas de Firebase (excepto Cloud Fu
 ## Estructura del proyecto
 
 ```
-App.js                    Punto de entrada: gate de autenticación (login o calendario)
+App.js                    Punto de entrada: gate de autenticación (login o tabs) + tab
+                             navigator (Calendario/Masajes, barra de tabs oculta —
+                             se navega con el botón del tag, el swipe entre tabs o la
+                             flecha de regreso)
 src/
   screens/
     LoginScreen.js         Login con email/contraseña
@@ -28,7 +31,6 @@ src/
   firebase/
     config.js               Config pública del proyecto Firebase (no es secreta)
     index.js                Inicialización de Auth/Firestore/Functions para la app
-  constants/services.js     SERVICE_DURATIONS: duraciones fijas (30/50/60/90 min)
   utils/dateHelpers.js      Helpers de fecha/hora (formateo, solapamiento, zonas horarias)
   theme.js                  Colores, tipografía y espaciados compartidos
 
@@ -65,7 +67,7 @@ name, description, durationMinutes, price, materials, enabled, createdAt
 
 ## Reglas de negocio clave
 
-- Duración de la cita siempre es una de **30, 50, 60 o 90 minutos** — nunca texto libre.
+- La duración de cada masaje la define el terapeuta libremente (en minutos) al crear/editar el masaje en el catálogo — no está limitada a valores fijos.
 - El cliente (formulario web) y el terapeuta (app) **eligen el masaje del mismo catálogo** (`services`) en vez de escribir servicio/duración/precio a mano — el servidor toma esos datos del catálogo, no del request.
 - `enabled` en un masaje solo controla si el **cliente** puede elegirlo en el formulario público; el terapeuta puede seguir agendándolo ella misma aunque esté deshabilitado.
 - El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.

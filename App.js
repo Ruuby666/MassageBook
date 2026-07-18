@@ -1,5 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -12,15 +12,11 @@ import LoginScreen from './src/screens/LoginScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import { colors } from './src/theme';
 
-const Tab = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
 
 function MainTabs() {
   return (
-    <Tab.Navigator
-      initialRouteName="Calendario"
-      tabBar={() => null}
-      screenOptions={{ headerShown: false }}
-    >
+    <Tab.Navigator initialRouteName="Calendario" tabBar={() => null}>
       <Tab.Screen name="Calendario" component={CalendarScreen} />
       <Tab.Screen name="Masajes" component={ServicesScreen} />
     </Tab.Navigator>
