@@ -119,7 +119,7 @@ export default function ServiceFormModal({ visible, service, onClose, onConfirm,
 
           <TextInput
             style={styles.input}
-            placeholder="Precio (MXN)"
+            placeholder="Precio (EUR)"
             placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             value={form.price}
