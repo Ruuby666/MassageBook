@@ -34,6 +34,7 @@ import {
 
 const createReservation = httpsCallable(functions, 'createReservation');
 const updateReservationTime = httpsCallable(functions, 'updateReservationTime');
+const deleteReservation = httpsCallable(functions, 'deleteReservation');
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
@@ -195,6 +196,10 @@ export default function CalendarScreen() {
     setSelectedAppointment(null);
   }
 
+  async function handleDeleteAppointment(reservationId) {
+    await deleteReservation({ reservationId });
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -279,6 +284,7 @@ export default function CalendarScreen() {
         appointment={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
         onEditTime={handleEditAppointmentTime}
+        onDelete={handleDeleteAppointment}
       />
     </SafeAreaView>
   );

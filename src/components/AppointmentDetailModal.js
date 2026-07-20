@@ -22,12 +22,13 @@ function DetailRow({ label, value }) {
   );
 }
 
-export default function AppointmentDetailModal({ appointment, onClose, onEditTime }) {
+export default function AppointmentDetailModal({ appointment, onClose, onEditTime, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [editDate, setEditDate] = useState(null);
   const [editTime, setEditTime] = useState(null);
   const [activePicker, setActivePicker] = useState(null); // 'date' | 'time' | null
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!appointment) {
@@ -74,6 +75,31 @@ export default function AppointmentDetailModal({ appointment, onClose, onEditTim
     }
   }
 
+  function confirmDelete() {
+    Alert.alert(
+      'Eliminar cita',
+      `¿Eliminar la cita de ${appointment.clientName}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await onDelete(appointment.id);
+              onClose();
+            } catch (error) {
+              Alert.alert('No se pudo eliminar', error.message || 'Intenta de nuevo.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <ModalBackdrop visible={Boolean(appointment)} onRequestClose={onClose}>
       <View style={styles.sheet} onStartShouldSetResponder={() => true}>
@@ -89,9 +115,19 @@ export default function AppointmentDetailModal({ appointment, onClose, onEditTim
                 )}
               </View>
               {!editing && (
-                <Pressable onPress={startEditing} hitSlop={12} testID="edit-time-button">
-                  <Ionicons name="pencil-outline" size={20} color={colors.accent} />
-                </Pressable>
+                <View style={styles.headerActions}>
+                  <Pressable
+                    onPress={confirmDelete}
+                    hitSlop={12}
+                    disabled={deleting}
+                    testID="delete-appointment-button"
+                  >
+                    <Ionicons name="trash-outline" size={20} color={colors.blocked} />
+                  </Pressable>
+                  <Pressable onPress={startEditing} hitSlop={12} testID="edit-time-button">
+                    <Ionicons name="pencil-outline" size={20} color={colors.accent} />
+                  </Pressable>
+                </View>
               )}
             </View>
 
@@ -176,6 +212,11 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
     marginRight: spacing.md,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
   title: {
     fontSize: typography.cardTitle,
