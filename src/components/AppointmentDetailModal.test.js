@@ -1,8 +1,10 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { fireEvent, render, userEvent } from '@testing-library/react-native';
 import AppointmentDetailModal from './AppointmentDetailModal';
 
 function buildAppointment(overrides = {}) {
   return {
+    id: 'apt-1',
     clientName: 'María López',
     date: new Date('2026-07-20T09:00:00'),
     service: 'Masaje relajante',
@@ -59,5 +61,82 @@ describe('AppointmentDetailModal', () => {
 
     fireEvent.press(getByTestId('modal-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('editing the date/time', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('reveals Fecha/Hora fields when the pencil is pressed, hidden by default', async () => {
+      const user = userEvent.setup();
+      const { getByTestId, getByText, queryByText } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onEditTime={() => {}} />
+      );
+
+      expect(queryByText('Fecha')).toBeNull();
+
+      await user.press(getByTestId('edit-time-button'));
+      expect(getByText('Fecha')).toBeTruthy();
+      expect(getByText('Hora')).toBeTruthy();
+    });
+
+    it('exits editing without saving when Cancelar is pressed', async () => {
+      const user = userEvent.setup();
+      const onEditTime = jest.fn();
+      const { getByTestId, getByText, queryByText } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onEditTime={onEditTime} />
+      );
+
+      await user.press(getByTestId('edit-time-button'));
+      await user.press(getByText('Cancelar'));
+
+      expect(queryByText('Fecha')).toBeNull();
+      expect(onEditTime).not.toHaveBeenCalled();
+    });
+
+    it('saves with the appointment id and unchanged date/time when Guardar is pressed', async () => {
+      const user = userEvent.setup();
+      const onEditTime = jest.fn().mockResolvedValue();
+      const { getByTestId, getByText } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onEditTime={onEditTime} />
+      );
+
+      await user.press(getByTestId('edit-time-button'));
+      await user.press(getByText('Guardar'));
+
+      expect(onEditTime).toHaveBeenCalledWith('apt-1', new Date('2026-07-20T09:00:00'));
+    });
+
+    it('exits editing after a successful save', async () => {
+      const user = userEvent.setup();
+      const onEditTime = jest.fn().mockResolvedValue();
+      const { getByTestId, getByText, queryByText } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onEditTime={onEditTime} />
+      );
+
+      await user.press(getByTestId('edit-time-button'));
+      await user.press(getByText('Guardar'));
+
+      expect(queryByText('Fecha')).toBeNull();
+    });
+
+    it('shows an alert and stays in editing mode when the save fails', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const onEditTime = jest.fn().mockRejectedValue(new Error('Ese horario ya está ocupado.'));
+      const { getByTestId, getByText } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onEditTime={onEditTime} />
+      );
+
+      await user.press(getByTestId('edit-time-button'));
+      await user.press(getByText('Guardar'));
+
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'No se pudo reprogramar',
+        'Ese horario ya está ocupado.'
+      );
+      expect(getByText('Fecha')).toBeTruthy();
+    });
   });
 });
