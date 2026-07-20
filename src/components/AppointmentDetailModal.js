@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: 10,
-    size: 20,
     marginLeft: spacing.sm,
   },
   cancelButton: {
