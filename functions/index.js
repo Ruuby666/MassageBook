@@ -103,6 +103,72 @@ exports.createReservation = onCall(async (request) => {
   return { id: docRef.id };
 });
 
+// Lets the therapist reschedule an existing reservation's date/time from
+// the app. Authenticated only — the public form never edits a booking, it
+// only creates new ones. Reuses the same overlap logic as createReservation
+// (buffer-free, since this is always an authenticated call), just excluding
+// the reservation's own current slot from the conflict check. Resets
+// reminderSent so sendReminders re-evaluates against the new date.
+exports.updateReservationTime = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede editar citas.');
+  }
+
+  const reservationId = String(request.data?.reservationId || '').trim();
+  if (!reservationId) {
+    throw new HttpsError('invalid-argument', 'Falta el id de la reserva.');
+  }
+
+  const startDate = new Date(request.data?.date);
+  if (Number.isNaN(startDate.getTime())) {
+    throw new HttpsError('invalid-argument', 'La fecha/hora no es válida.');
+  }
+
+  try {
+    assertFutureDate(startDate);
+  } catch (error) {
+    throw new HttpsError(error.code, error.message);
+  }
+
+  const reservationRef = db.collection('reservations').doc(reservationId);
+  const reservationSnap = await reservationRef.get();
+  if (!reservationSnap.exists) {
+    throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+  }
+  const { durationMinutes } = reservationSnap.data();
+
+  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
+    startDate,
+    durationMinutes,
+    true
+  );
+
+  const nearbySnapshot = await db
+    .collection('reservations')
+    .where('date', '>=', Timestamp.fromDate(queryStart))
+    .where('date', '<', Timestamp.fromDate(queryEnd))
+    .get();
+
+  const existingReservations = nearbySnapshot.docs
+    .filter((doc) => doc.id !== reservationId)
+    .map((doc) => {
+      const existing = doc.data();
+      const start = existing.date.toDate().getTime();
+      return { start, end: start + existing.durationMinutes * 60000 };
+    });
+
+  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
+    );
+  }
+
+  await reservationRef.update({ date: Timestamp.fromDate(startDate), reminderSent: false });
+
+  return { id: reservationId };
+});
+
 // Daily at 10:00 Canary Islands time — emails clients whose reservation is
 // exactly 2 days away and hasn't already been reminded. Failures for one
 // reservation don't block the rest of the batch.
