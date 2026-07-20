@@ -169,6 +169,29 @@ exports.updateReservationTime = onCall(async (request) => {
   return { id: reservationId };
 });
 
+// Lets the therapist cancel/delete an existing reservation from the app.
+// Authenticated only, same reasoning as updateReservationTime.
+exports.deleteReservation = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede eliminar citas.');
+  }
+
+  const reservationId = String(request.data?.reservationId || '').trim();
+  if (!reservationId) {
+    throw new HttpsError('invalid-argument', 'Falta el id de la reserva.');
+  }
+
+  const reservationRef = db.collection('reservations').doc(reservationId);
+  const reservationSnap = await reservationRef.get();
+  if (!reservationSnap.exists) {
+    throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+  }
+
+  await reservationRef.delete();
+
+  return { id: reservationId };
+});
+
 // Daily at 10:00 Canary Islands time — emails clients whose reservation is
 // exactly 2 days away and hasn't already been reminded. Failures for one
 // reservation don't block the rest of the batch.
