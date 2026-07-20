@@ -139,4 +139,75 @@ describe('AppointmentDetailModal', () => {
       expect(getByText('Fecha')).toBeTruthy();
     });
   });
+
+  describe('deleting the appointment', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('asks for confirmation before deleting', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onDelete={() => {}} />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Eliminar cita',
+        expect.stringContaining('María López'),
+        expect.any(Array)
+      );
+    });
+
+    it('does not delete when the confirmation is dismissed', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const onDelete = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onDelete={onDelete} />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      expect(onDelete).not.toHaveBeenCalled();
+    });
+
+    it('deletes and closes the modal when confirmed', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        buttons.find((button) => button.style === 'destructive').onPress();
+      });
+      const user = userEvent.setup();
+      const onDelete = jest.fn().mockResolvedValue();
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={onClose} onDelete={onDelete} />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      expect(onDelete).toHaveBeenCalledWith('apt-1');
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an alert and does not close when deleting fails', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        if (buttons) {
+          buttons.find((button) => button.style === 'destructive').onPress();
+        }
+      });
+      const user = userEvent.setup();
+      const onDelete = jest.fn().mockRejectedValue(new Error('No hay conexión.'));
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={onClose} onDelete={onDelete} />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      expect(alertSpy).toHaveBeenLastCalledWith('No se pudo eliminar', 'No hay conexión.');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+  });
 });
