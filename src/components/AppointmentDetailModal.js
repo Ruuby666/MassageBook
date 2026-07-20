@@ -122,10 +122,10 @@ export default function AppointmentDetailModal({ appointment, onClose, onEditTim
                     disabled={deleting}
                     testID="delete-appointment-button"
                   >
-                    <Ionicons name="trash-outline" size={20} color={colors.blocked} />
+                    <Ionicons name="trash-outline" size={26} color={colors.blocked} />
                   </Pressable>
                   <Pressable onPress={startEditing} hitSlop={12} testID="edit-time-button">
-                    <Ionicons name="pencil-outline" size={20} color={colors.accent} />
+                    <Ionicons name="pencil-outline" size={26} color={colors.accent} />
                   </Pressable>
                 </View>
               )}
@@ -260,6 +260,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: 10,
+    size: 20,
     marginLeft: spacing.sm,
   },
   cancelButton: {
