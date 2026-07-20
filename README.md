@@ -35,9 +35,12 @@ src/
   theme.js                  Colores, tipografía y espaciados compartidos
 
 functions/
-  index.js                 Cloud Function createReservation (único punto de escritura
-                             de reservas; valida duración, campos requeridos, fecha
-                             futura y solapamiento con colchón de 30 min)
+  index.js                 createReservation (único punto de escritura de reservas)
+                             y sendReminders (Cloud Function programada, envía el
+                             recordatorio por correo 2 días antes de cada cita)
+  validation.js             Lógica pura de validación/solapamiento de reservas
+  reminders.js               Lógica pura de la ventana de fecha y el contenido
+                             del correo de recordatorio
 
 web/
   index.html, styles.css, script.js, firebase-config.js
@@ -75,6 +78,7 @@ name, description, durationMinutes, price, materials, enabled, createdAt
 - El **formulario web** no permite reservar en días u horas que la terapeuta haya bloqueado (`blocks`); ella puede seguir agendando sobre su propio bloqueo desde la app si lo necesita.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
+- Cada cita con correo recibe un **recordatorio por email 2 días antes**, una sola vez (`reminderSent`). Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio.
 
 ## Desarrollo local
 
@@ -99,7 +103,21 @@ npx firebase-tools deploy --only hosting
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
 
+## Recordatorios por correo
+
+`sendReminders` corre todos los días a las **10:00 (hora de Canarias)**, busca citas cuya fecha caiga exactamente 2 días después y les manda un correo (una sola vez, marca `reminderSent: true`). Se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
+
+**Configuración (una sola vez):**
+1. En la cuenta de Gmail que va a enviar los correos: activa la verificación en 2 pasos, luego genera una "contraseña de aplicación" en `myaccount.google.com` → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.
+2. Copia `functions/.env.local.example` a `functions/.env.local` (ya está en `.gitignore`, nunca se sube) y rellena `GMAIL_USER` y `GMAIL_APP_PASSWORD`.
+3. Sube esos valores como secretos de Firebase (cada uno por separado, `--data-file=-` lee el valor de stdin):
+   ```bash
+   grep '^GMAIL_USER=' functions/.env.local | cut -d= -f2- | npx firebase-tools functions:secrets:set GMAIL_USER --data-file=-
+   grep '^GMAIL_APP_PASSWORD=' functions/.env.local | cut -d= -f2- | npx firebase-tools functions:secrets:set GMAIL_APP_PASSWORD --data-file=-
+   ```
+   (o `functions:secrets:set NOMBRE` de forma interactiva, pegando el valor cuando lo pida).
+4. Despliega: `npx firebase-tools deploy --only functions`.
+
 ## Pendiente / próximas fases
 
-- **Recordatorios por correo**: Cloud Function programada (diaria) que busque citas a 4 días de distancia y envíe un recordatorio por email vía Resend. El campo `email` y `reminderSent` en `reservations` ya están listos para esto.
 - **WhatsApp** como canal de recordatorio adicional (mencionado en el brief original, no priorizado aún).
