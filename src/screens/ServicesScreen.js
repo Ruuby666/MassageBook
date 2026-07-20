@@ -124,6 +124,7 @@ export default function ServicesScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </Pressable>
+        <Text style={styles.title}>Gestor de Masajes</Text>
       </View>
 
       {services.length === 0 ? (
@@ -160,9 +161,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  title: {
+    fontSize: typography.header,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginLeft: spacing.md,
   },
   listContent: {
     paddingTop: spacing.sm,
