@@ -1,4 +1,8 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { defineSecret } = require('firebase-functions/params');
+const { logger } = require('firebase-functions');
+const nodemailer = require('nodemailer');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const {
@@ -12,9 +16,17 @@ const {
   getOverlapWindow,
   hasOverlap,
 } = require('./validation');
+const {
+  getReminderQueryWindow,
+  isReminderCandidate,
+  buildReminderEmail,
+} = require('./reminders');
 
 initializeApp();
 const db = getFirestore();
+
+const gmailUser = defineSecret('GMAIL_USER');
+const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
 
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
@@ -90,3 +102,49 @@ exports.createReservation = onCall(async (request) => {
 
   return { id: docRef.id };
 });
+
+// Daily at 10:00 Canary Islands time — emails clients whose reservation is
+// exactly 2 days away and hasn't already been reminded. Failures for one
+// reservation don't block the rest of the batch.
+exports.sendReminders = onSchedule(
+  { schedule: '0 10 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
+  async () => {
+    const { targetDateKey, queryStart, queryEnd } = getReminderQueryWindow();
+
+    const snapshot = await db
+      .collection('reservations')
+      .where('date', '>=', Timestamp.fromDate(queryStart))
+      .where('date', '<', Timestamp.fromDate(queryEnd))
+      .get();
+
+    const candidates = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate() }))
+      .filter((reservation) => isReminderCandidate(reservation, targetDateKey));
+
+    if (candidates.length === 0) {
+      logger.info(`No reminders to send for ${targetDateKey}.`);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: gmailUser.value(), pass: gmailAppPassword.value() },
+    });
+
+    for (const reservation of candidates) {
+      const { subject, html, text } = buildReminderEmail(reservation);
+      try {
+        await transporter.sendMail({
+          from: gmailUser.value(),
+          to: reservation.email,
+          subject,
+          html,
+          text,
+        });
+        await db.collection('reservations').doc(reservation.id).update({ reminderSent: true });
+      } catch (error) {
+        logger.error(`Failed to send reminder for reservation ${reservation.id}:`, error);
+      }
+    }
+  }
+);
