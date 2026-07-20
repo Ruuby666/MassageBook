@@ -33,6 +33,7 @@ import {
 } from '../utils/dateHelpers';
 
 const createReservation = httpsCallable(functions, 'createReservation');
+const updateReservationTime = httpsCallable(functions, 'updateReservationTime');
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
@@ -189,6 +190,11 @@ export default function CalendarScreen() {
     setAppointmentModalVisible(false);
   }
 
+  async function handleEditAppointmentTime(reservationId, newDate) {
+    await updateReservationTime({ reservationId, date: newDate.toISOString() });
+    setSelectedAppointment(null);
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -272,6 +278,7 @@ export default function CalendarScreen() {
       <AppointmentDetailModal
         appointment={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
+        onEditTime={handleEditAppointmentTime}
       />
     </SafeAreaView>
   );
