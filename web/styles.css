@@ -53,6 +53,7 @@ label {
 
 input[type='text'],
 input[type='tel'],
+input[type='email'],
 input[type='date'],
 input[type='time'],
 textarea {
@@ -70,33 +71,20 @@ textarea {
   resize: vertical;
 }
 
-fieldset {
-  border: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-legend {
+.field-label {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 600;
-  padding: 0;
-  margin-bottom: 2px;
+  margin-bottom: -8px;
 }
 
-.duration-options {
+.service-list {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.chip {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+.service-item {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -107,10 +95,48 @@ legend {
   cursor: pointer;
 }
 
-.chip:has(input:checked) {
+.service-item.selected {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--surface);
+}
+
+.service-loading {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.service-details {
+  background: var(--accent-soft);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.service-details h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.service-details p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.service-details .service-meta {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.service-details .service-materials {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-secondary);
 }
 
 button[type='submit'] {
@@ -142,4 +168,106 @@ button[type='submit']:disabled {
 
 .message.error {
   color: var(--error);
+}
+
+.field-hint {
+  font-size: 13px;
+  color: var(--error);
+  margin: -8px 0 4px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  z-index: 10;
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  background: var(--surface);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  padding: 24px 20px;
+  box-sizing: border-box;
+}
+
+.modal h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.review-list {
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-list dt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.review-list dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-actions button {
+  flex: 1;
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-secondary {
+  background: var(--background);
+  color: var(--text-primary);
+}
+
+.button-primary {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.button-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (min-width: 540px) {
+  .modal-backdrop {
+    align-items: center;
+  }
+
+  .modal {
+    border-radius: 16px;
+  }
 }

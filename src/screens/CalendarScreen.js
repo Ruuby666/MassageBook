@@ -9,46 +9,78 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
+import AppointmentDetailModal from '../components/AppointmentDetailModal';
 import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
-import DaySelector from '../components/DaySelector';
-import FloatingActionButton from '../components/FloatingActionButton';
+import ExpandableFabMenu from '../components/ExpandableFabMenu';
 import { db, functions } from '../firebase';
-import { colors, spacing, typography } from '../theme';
-import {
-  buildDayWindow,
-  formatMonthYear,
-  isSameDay,
-  timeStringToDate,
-  toDateKey,
-} from '../utils/dateHelpers';
+import { colors, spacing } from '../theme';
+import { isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
+
+const calendarTheme = {
+  backgroundColor: colors.background,
+  calendarBackground: colors.background,
+  textSectionTitleColor: colors.textSecondary,
+  selectedDayBackgroundColor: colors.accent,
+  selectedDayTextColor: colors.surface,
+  todayTextColor: colors.accent,
+  dayTextColor: colors.textPrimary,
+  textDisabledColor: colors.border,
+  monthTextColor: colors.textPrimary,
+  arrowColor: colors.accent,
+  textDayFontWeight: '500',
+  textMonthFontWeight: '700',
+  textDayHeaderFontWeight: '600',
+};
 
 const createReservation = httpsCallable(functions, 'createReservation');
+const updateReservationTime = httpsCallable(functions, 'updateReservationTime');
+const deleteReservation = httpsCallable(functions, 'deleteReservation');
+const confirmReservation = httpsCallable(functions, 'confirmReservation');
+const rejectReservation = httpsCallable(functions, 'rejectReservation');
 
 export default function CalendarScreen() {
-  const days = useMemo(() => buildDayWindow(new Date()), []);
-  const [selectedDate, setSelectedDate] = useState(days[0]);
+  const navigation = useNavigation();
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [appointments, setAppointments] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+
+  const appointmentsQuery = useMemo(() => query(collection(db, 'reservations'), orderBy('date')), []);
+  const blocksQuery = useMemo(() => collection(db, 'blocks'), []);
+  const servicesQuery = useMemo(() => query(collection(db, 'services'), orderBy('name')), []);
+
+  function toAppointments(snapshot) {
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return { id: docSnap.id, ...data, date: data.date.toDate() };
+    });
+  }
+
+  function toDocs(snapshot) {
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  }
 
   useEffect(() => {
     const unsubscribeAppointments = onSnapshot(
-      query(collection(db, 'reservations'), orderBy('date')),
+      appointmentsQuery,
       (snapshot) => {
-        setAppointments(
-          snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            return { id: docSnap.id, ...data, date: data.date.toDate() };
-          })
-        );
+        setAppointments(toAppointments(snapshot));
         setLoading(false);
       },
       (error) => {
@@ -58,44 +90,51 @@ export default function CalendarScreen() {
     );
 
     const unsubscribeBlocks = onSnapshot(
-      collection(db, 'blocks'),
-      (snapshot) => {
-        setBlocks(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
-      },
+      blocksQuery,
+      (snapshot) => setBlocks(toDocs(snapshot)),
       (error) => {
         Alert.alert('Error', 'No se pudieron cargar los bloqueos: ' + error.message);
+      }
+    );
+
+    const unsubscribeServices = onSnapshot(
+      servicesQuery,
+      (snapshot) => setServices(toDocs(snapshot)),
+      (error) => {
+        Alert.alert('Error', 'No se pudieron cargar los masajes: ' + error.message);
       }
     );
 
     return () => {
       unsubscribeAppointments();
       unsubscribeBlocks();
+      unsubscribeServices();
     };
-  }, []);
+  }, [appointmentsQuery, blocksQuery, servicesQuery]);
 
-  const daysWithAppointments = useMemo(() => {
-    const set = new Set();
+  const markedDates = useMemo(() => {
+    const marks = {};
+
     appointments.forEach((appointment) => {
-      set.add(new Date(appointment.date).toDateString());
+      const key = toDateKey(new Date(appointment.date));
+      const dots = marks[key]?.dots || [];
+      if (!dots.some((dot) => dot.key === 'appointment')) {
+        marks[key] = { ...marks[key], dots: [...dots, { key: 'appointment', color: colors.accent }] };
+      }
     });
-    return set;
-  }, [appointments]);
 
-  const blockedDays = useMemo(() => {
-    const set = new Set();
     blocks.forEach((block) => {
-      set.add(new Date(`${block.date}T00:00:00`).toDateString());
+      const dots = marks[block.date]?.dots || [];
+      if (!dots.some((dot) => dot.key === 'block')) {
+        marks[block.date] = { ...marks[block.date], dots: [...dots, { key: 'block', color: colors.blocked }] };
+      }
     });
-    return set;
-  }, [blocks]);
 
-  const fullyBlockedDays = useMemo(() => {
-    const set = new Set();
-    blocks
-      .filter((block) => block.allDay)
-      .forEach((block) => set.add(new Date(`${block.date}T00:00:00`).toDateString()));
-    return set;
-  }, [blocks]);
+    const selectedKey = toDateKey(selectedDate);
+    marks[selectedKey] = { ...marks[selectedKey], selected: true, selectedColor: colors.accent };
+
+    return marks;
+  }, [appointments, blocks, selectedDate]);
 
   const appointmentsForSelectedDay = useMemo(() => {
     return appointments.filter((appointment) => isSameDay(new Date(appointment.date), selectedDate));
@@ -146,6 +185,23 @@ export default function CalendarScreen() {
     setAppointmentModalVisible(false);
   }
 
+  async function handleEditAppointmentTime(reservationId, newDate) {
+    await updateReservationTime({ reservationId, date: newDate.toISOString() });
+    setSelectedAppointment(null);
+  }
+
+  async function handleDeleteAppointment(reservationId) {
+    await deleteReservation({ reservationId });
+  }
+
+  async function handleConfirmReservation(reservationId) {
+    await confirmReservation({ reservationId });
+  }
+
+  async function handleRejectReservation(reservationId) {
+    await rejectReservation({ reservationId });
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -156,48 +212,64 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
-      <DaySelector
-        days={days}
-        selectedDate={selectedDate}
-        onSelectDate={setSelectedDate}
-        daysWithAppointments={daysWithAppointments}
-        blockedDays={blockedDays}
-        fullyBlockedDays={fullyBlockedDays}
+      <Calendar
+        style={styles.calendar}
+        current={toDateKey(selectedDate)}
+        markingType="multi-dot"
+        markedDates={markedDates}
+        onDayPress={(day) => setSelectedDate(new Date(`${day.dateString}T00:00:00`))}
+        theme={calendarTheme}
       />
-      {itemsForSelectedDay.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No tienes citas ni bloqueos este día</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={itemsForSelectedDay}
-          keyExtractor={(item) => item.data.id}
-          renderItem={({ item }) =>
-            item.type === 'appointment' ? (
-              <AppointmentCard appointment={item.data} />
-            ) : (
-              <BlockCard block={item.data} onDelete={handleDeleteBlock} />
-            )
-          }
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <FlatList
+        data={itemsForSelectedDay}
+        keyExtractor={(item) => item.data.id}
+        renderItem={({ item }) =>
+          item.type === 'appointment' ? (
+            <AppointmentCard appointment={item.data} onPress={setSelectedAppointment} />
+          ) : (
+            <BlockCard block={item.data} onDelete={handleDeleteBlock} />
+          )
+        }
+        contentContainerStyle={
+          itemsForSelectedDay.length === 0 ? styles.emptyListContent : styles.listContent
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No tienes citas ni bloqueos este día</Text>
+          </View>
+        }
+      />
 
-      <FloatingActionButton
-        icon="add"
-        bottomOffset={96}
-        onPress={() => setAppointmentModalVisible(true)}
-      />
-      <FloatingActionButton
-        icon="lock-closed"
-        bottomOffset={28}
-        onPress={() => setBlockModalVisible(true)}
+      <ExpandableFabMenu
+        actions={[
+          {
+            key: 'masajes',
+            icon: 'pricetags-outline',
+            label: 'Masajes',
+            onPress: () => navigation.navigate('Masajes'),
+            testID: 'fab-masajes',
+          },
+          {
+            key: 'block',
+            icon: 'lock-closed',
+            label: 'Bloquear',
+            onPress: () => setBlockModalVisible(true),
+            testID: 'fab-block',
+          },
+          {
+            key: 'appointment',
+            icon: 'add-circle',
+            label: 'Cita',
+            onPress: () => setAppointmentModalVisible(true),
+            testID: 'fab-appointment',
+          },
+        ]}
       />
 
       <AppointmentModal
         visible={appointmentModalVisible}
         date={selectedDate}
+        services={services}
         existingAppointments={appointmentsForSelectedDay}
         onClose={() => setAppointmentModalVisible(false)}
         onConfirm={handleConfirmAppointment}
@@ -208,6 +280,15 @@ export default function CalendarScreen() {
         date={selectedDate}
         onClose={() => setBlockModalVisible(false)}
         onConfirm={handleConfirmBlock}
+      />
+
+      <AppointmentDetailModal
+        appointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
+        onEditTime={handleEditAppointmentTime}
+        onDelete={handleDeleteAppointment}
+        onConfirm={handleConfirmReservation}
+        onReject={handleRejectReservation}
       />
     </SafeAreaView>
   );
@@ -222,16 +303,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  header: {
-    fontSize: typography.header,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+  calendar: {
+    paddingBottom: spacing.sm,
   },
   listContent: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl + 128,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   emptyState: {
     flex: 1,

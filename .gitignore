@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -47,3 +48,4 @@ firebase-debug.*.log
 firestore-debug.log
 ui-debug.log
 functions/node_modules/
+*.apk

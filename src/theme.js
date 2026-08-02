@@ -8,11 +8,11 @@ export const colors = {
   border: '#E7E1D8',
   blocked: '#B5602F',
   blockedSurface: '#E4DED4',
+  pending: '#B8862B',
+  pendingSurface: '#F5E6C8',
 };
 
 export const typography = {
-  dayLabel: 13,
-  dateNumber: 17,
   header: 22,
   cardTitle: 16,
   cardBody: 14,
@@ -25,9 +25,4 @@ export const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
-};
-
-export const daySelector = {
-  chipSize: 44,
-  chipRadius: 22,
 };
