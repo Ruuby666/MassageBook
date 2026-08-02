@@ -9,10 +9,9 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
@@ -20,7 +19,7 @@ import AppointmentDetailModal from '../components/AppointmentDetailModal';
 import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
-import FloatingActionButton from '../components/FloatingActionButton';
+import ExpandableFabMenu from '../components/ExpandableFabMenu';
 import { db, functions } from '../firebase';
 import { colors, spacing } from '../theme';
 import { isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
@@ -213,11 +212,6 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
-          <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
-        </Pressable>
-      </View>
       <Calendar
         style={styles.calendar}
         current={toDateKey(selectedDate)}
@@ -246,15 +240,30 @@ export default function CalendarScreen() {
         }
       />
 
-      <FloatingActionButton
-        icon="add"
-        bottomOffset={96}
-        onPress={() => setAppointmentModalVisible(true)}
-      />
-      <FloatingActionButton
-        icon="lock-closed"
-        bottomOffset={28}
-        onPress={() => setBlockModalVisible(true)}
+      <ExpandableFabMenu
+        actions={[
+          {
+            key: 'masajes',
+            icon: 'pricetags-outline',
+            label: 'Masajes',
+            onPress: () => navigation.navigate('Masajes'),
+            testID: 'fab-masajes',
+          },
+          {
+            key: 'block',
+            icon: 'lock-closed',
+            label: 'Bloquear',
+            onPress: () => setBlockModalVisible(true),
+            testID: 'fab-block',
+          },
+          {
+            key: 'appointment',
+            icon: 'add-circle',
+            label: 'Cita',
+            onPress: () => setAppointmentModalVisible(true),
+            testID: 'fab-appointment',
+          },
+        ]}
       />
 
       <AppointmentModal
@@ -293,14 +302,6 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
   },
   calendar: {
     paddingBottom: spacing.sm,
