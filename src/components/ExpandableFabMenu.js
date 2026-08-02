@@ -96,6 +96,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 28,
+    // Explicit width so every absolutely-positioned action row anchors to
+    // the exact same right edge as the main button, instead of relying on
+    // the container auto-sizing to its one in-flow child (mainButton) —
+    // that auto-sizing is where native and web disagreed.
+    width: 56,
+    alignItems: 'flex-end',
   },
   mainButton: {
     width: 56,
