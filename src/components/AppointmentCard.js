@@ -3,7 +3,7 @@ import { colors, spacing, typography } from '../theme';
 import { formatTime } from '../utils/dateHelpers';
 
 export default function AppointmentCard({ appointment, onPress }) {
-  const { clientName, phone, address, service, durationMinutes, date, notes } = appointment;
+  const { clientName, phone, address, service, durationMinutes, date, notes, status } = appointment;
 
   return (
     <Pressable style={styles.card} onPress={() => onPress?.(appointment)}>
@@ -19,6 +19,11 @@ export default function AppointmentCard({ appointment, onPress }) {
         <Text style={styles.address}>{address}</Text>
         <Text style={styles.phone}>{phone}</Text>
         {notes ? <Text style={styles.notes}>{notes}</Text> : null}
+        {status === 'pending' ? (
+          <View style={styles.pendingBadge}>
+            <Text style={styles.pendingText}>Pendiente</Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -91,5 +96,18 @@ const styles = StyleSheet.create({
     color: '#A8A8A8',
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  pendingBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.pendingSurface,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  pendingText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.pending,
   },
 });
