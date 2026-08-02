@@ -96,12 +96,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 28,
-    // Explicit width so every absolutely-positioned action row anchors to
-    // the exact same right edge as the main button, instead of relying on
-    // the container auto-sizing to its one in-flow child (mainButton) —
-    // that auto-sizing is where native and web disagreed.
     width: 56,
-    alignItems: 'flex-end',
   },
   mainButton: {
     width: 56,
@@ -118,10 +113,20 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     position: 'absolute',
+    // Fixed width (comfortably wider than the longest label) instead of
+    // letting it size to content — on native, an absolutely-positioned
+    // view with only `right` set and an auto width gets its width from
+    // measuring its children, and that measurement is what was landing
+    // buttons at a different x per label length. A fixed width removes
+    // that step: `right: 0` now has a known box to anchor to, and
+    // justifyContent pins the button to this row's right edge regardless
+    // of how wide its label is.
+    width: 200,
     right: 0,
     bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   actionLabel: {
     backgroundColor: colors.surface,
