@@ -1,24 +1,65 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, typography } from '../theme';
+
+const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
+
+// Vertical distance between an action's resting spot and the next one,
+// measured from the main button's position (where every action starts,
+// hidden behind it, before sliding up into place).
+const ACTION_SPACING = 72;
 
 // A single floating button that expands upward into a stack of labeled
 // actions (speed-dial pattern), instead of several always-visible FABs
-// competing for space in the corner.
+// competing for space in the corner. The actions slide out from behind
+// the main button and back, which is why they're always mounted and
+// animated rather than conditionally rendered — the main button itself
+// never moves.
 export default function ExpandableFabMenu({ actions }) {
   const [expanded, setExpanded] = useState(false);
+  const animation = useRef(new Animated.Value(0)).current;
+
+  function animateTo(next) {
+    Animated.spring(animation, {
+      toValue: next ? 1 : 0,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  }
+
+  function toggle() {
+    const next = !expanded;
+    setExpanded(next);
+    animateTo(next);
+  }
 
   function handleActionPress(action) {
     setExpanded(false);
+    animateTo(false);
     action.onPress();
   }
 
+  const rotate = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
   return (
-    <View style={styles.container} pointerEvents="box-none">
-      {expanded &&
-        actions.map((action) => (
-          <View key={action.key} style={styles.actionRow}>
+    <View style={styles.container}>
+      {actions.map((action, index) => {
+        const offset = (index + 1) * ACTION_SPACING;
+        const translateY = animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -offset],
+        });
+
+        return (
+          <Animated.View
+            key={action.key}
+            pointerEvents={expanded ? 'auto' : 'none'}
+            style={[styles.actionRow, { opacity: animation, transform: [{ translateY }] }]}
+          >
             <Text style={styles.actionLabel}>{action.label}</Text>
             <Pressable
               style={styles.actionButton}
@@ -26,18 +67,25 @@ export default function ExpandableFabMenu({ actions }) {
               hitSlop={8}
               testID={action.testID}
             >
-              <Ionicons name={action.icon} size={20} color={colors.surface} />
+              <Ionicons name={action.icon} size={26} color={colors.surface} />
             </Pressable>
-          </View>
-        ))}
+          </Animated.View>
+        );
+      })}
 
       <Pressable
         style={styles.mainButton}
-        onPress={() => setExpanded(!expanded)}
+        onPress={toggle}
         hitSlop={8}
         testID="fab-menu-toggle"
+        accessibilityLabel={expanded ? 'Cerrar menú' : 'Abrir menú'}
       >
-        <Ionicons name={expanded ? 'close' : 'add'} size={26} color={colors.surface} />
+        <AnimatedIonicons
+          name="chevron-down"
+          size={26}
+          color={colors.surface}
+          style={{ transform: [{ rotate }] }}
+        />
       </Pressable>
     </View>
   );
@@ -48,8 +96,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 28,
-    flexDirection: 'column-reverse',
-    alignItems: 'flex-end',
   },
   mainButton: {
     width: 56,
@@ -65,9 +111,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   actionRow: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
   actionLabel: {
     backgroundColor: colors.surface,
@@ -85,9 +133,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   actionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
