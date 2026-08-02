@@ -22,13 +22,22 @@ function DetailRow({ label, value }) {
   );
 }
 
-export default function AppointmentDetailModal({ appointment, onClose, onEditTime, onDelete }) {
+export default function AppointmentDetailModal({
+  appointment,
+  onClose,
+  onEditTime,
+  onDelete,
+  onConfirm,
+  onReject,
+}) {
   const [editing, setEditing] = useState(false);
   const [editDate, setEditDate] = useState(null);
   const [editTime, setEditTime] = useState(null);
   const [activePicker, setActivePicker] = useState(null); // 'date' | 'time' | null
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     if (!appointment) {
@@ -73,6 +82,43 @@ export default function AppointmentDetailModal({ appointment, onClose, onEditTim
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleConfirmPress() {
+    setConfirming(true);
+    try {
+      await onConfirm(appointment.id);
+      onClose();
+    } catch (error) {
+      Alert.alert('No se pudo confirmar', error.message || 'Intenta de nuevo.');
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  function confirmReject() {
+    Alert.alert(
+      'Rechazar reserva',
+      `¿Rechazar la reserva de ${appointment.clientName}? Se le avisará por correo y no se podrá deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Rechazar',
+          style: 'destructive',
+          onPress: async () => {
+            setRejecting(true);
+            try {
+              await onReject(appointment.id);
+              onClose();
+            } catch (error) {
+              Alert.alert('No se pudo rechazar', error.message || 'Intenta de nuevo.');
+            } finally {
+              setRejecting(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   function confirmDelete() {
@@ -130,6 +176,29 @@ export default function AppointmentDetailModal({ appointment, onClose, onEditTim
                 </View>
               )}
             </View>
+
+            {appointment.status === 'pending' && !editing && (
+              <View style={styles.pendingActions}>
+                <Pressable
+                  style={[styles.button, styles.rejectButton, rejecting && styles.buttonDisabled]}
+                  onPress={confirmReject}
+                  disabled={rejecting || confirming}
+                  testID="reject-reservation-button"
+                >
+                  <Text style={styles.rejectButtonText}>{rejecting ? 'Rechazando…' : 'Rechazar'}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, styles.confirmButton, confirming && styles.buttonDisabled]}
+                  onPress={handleConfirmPress}
+                  disabled={rejecting || confirming}
+                  testID="confirm-reservation-button"
+                >
+                  <Text style={styles.confirmButtonText}>
+                    {confirming ? 'Confirmando…' : 'Confirmar reserva'}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
 
             {editing && (
               <View style={styles.editBox}>
@@ -227,6 +296,18 @@ const styles = StyleSheet.create({
     fontSize: typography.cardMeta,
     color: colors.accent,
     marginTop: 4,
+  },
+  pendingActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: spacing.lg,
+  },
+  rejectButton: {
+    backgroundColor: colors.blockedSurface,
+  },
+  rejectButtonText: {
+    color: colors.blocked,
+    fontWeight: '600',
   },
   editBox: {
     marginBottom: spacing.lg,
