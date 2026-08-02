@@ -14,23 +14,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
 import AppointmentDetailModal from '../components/AppointmentDetailModal';
 import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
-import DaySelector from '../components/DaySelector';
 import FloatingActionButton from '../components/FloatingActionButton';
 import { db, functions } from '../firebase';
-import { colors, spacing, typography } from '../theme';
-import {
-  buildDayWindow,
-  formatMonthYear,
-  isSameDay,
-  timeStringToDate,
-  toDateKey,
-} from '../utils/dateHelpers';
+import { colors, spacing } from '../theme';
+import { isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
+
+const calendarTheme = {
+  backgroundColor: colors.background,
+  calendarBackground: colors.background,
+  textSectionTitleColor: colors.textSecondary,
+  selectedDayBackgroundColor: colors.accent,
+  selectedDayTextColor: colors.surface,
+  todayTextColor: colors.accent,
+  dayTextColor: colors.textPrimary,
+  textDisabledColor: colors.border,
+  monthTextColor: colors.textPrimary,
+  arrowColor: colors.accent,
+  textDayFontWeight: '500',
+  textMonthFontWeight: '700',
+  textDayHeaderFontWeight: '600',
+};
 
 const createReservation = httpsCallable(functions, 'createReservation');
 const updateReservationTime = httpsCallable(functions, 'updateReservationTime');
@@ -40,8 +50,11 @@ const rejectReservation = httpsCallable(functions, 'rejectReservation');
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
-  const days = useMemo(() => buildDayWindow(new Date()), []);
-  const [selectedDate, setSelectedDate] = useState(days[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [appointments, setAppointments] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [services, setServices] = useState([]);
@@ -120,29 +133,29 @@ export default function CalendarScreen() {
     }
   }
 
-  const daysWithAppointments = useMemo(() => {
-    const set = new Set();
+  const markedDates = useMemo(() => {
+    const marks = {};
+
     appointments.forEach((appointment) => {
-      set.add(new Date(appointment.date).toDateString());
+      const key = toDateKey(new Date(appointment.date));
+      const dots = marks[key]?.dots || [];
+      if (!dots.some((dot) => dot.key === 'appointment')) {
+        marks[key] = { ...marks[key], dots: [...dots, { key: 'appointment', color: colors.accent }] };
+      }
     });
-    return set;
-  }, [appointments]);
 
-  const blockedDays = useMemo(() => {
-    const set = new Set();
     blocks.forEach((block) => {
-      set.add(new Date(`${block.date}T00:00:00`).toDateString());
+      const dots = marks[block.date]?.dots || [];
+      if (!dots.some((dot) => dot.key === 'block')) {
+        marks[block.date] = { ...marks[block.date], dots: [...dots, { key: 'block', color: colors.blocked }] };
+      }
     });
-    return set;
-  }, [blocks]);
 
-  const fullyBlockedDays = useMemo(() => {
-    const set = new Set();
-    blocks
-      .filter((block) => block.allDay)
-      .forEach((block) => set.add(new Date(`${block.date}T00:00:00`).toDateString()));
-    return set;
-  }, [blocks]);
+    const selectedKey = toDateKey(selectedDate);
+    marks[selectedKey] = { ...marks[selectedKey], selected: true, selectedColor: colors.accent };
+
+    return marks;
+  }, [appointments, blocks, selectedDate]);
 
   const appointmentsForSelectedDay = useMemo(() => {
     return appointments.filter((appointment) => isSameDay(new Date(appointment.date), selectedDate));
@@ -221,27 +234,24 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.header}>{formatMonthYear(selectedDate)}</Text>
-        <View style={styles.headerActions}>
-          <Pressable onPress={handleRefresh} disabled={refreshing} hitSlop={12}>
-            {refreshing ? (
-              <ActivityIndicator color={colors.textPrimary} size="small" />
-            ) : (
-              <Ionicons name="reload-outline" size={22} color={colors.textPrimary} />
-            )}
-          </Pressable>
-          <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
-            <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
-          </Pressable>
-        </View>
+        <Pressable onPress={handleRefresh} disabled={refreshing} hitSlop={12}>
+          {refreshing ? (
+            <ActivityIndicator color={colors.textPrimary} size="small" />
+          ) : (
+            <Ionicons name="reload-outline" size={22} color={colors.textPrimary} />
+          )}
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
+          <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
+        </Pressable>
       </View>
-      <DaySelector
-        days={days}
-        selectedDate={selectedDate}
-        onSelectDate={setSelectedDate}
-        daysWithAppointments={daysWithAppointments}
-        blockedDays={blockedDays}
-        fullyBlockedDays={fullyBlockedDays}
+      <Calendar
+        style={styles.calendar}
+        current={toDateKey(selectedDate)}
+        markingType="multi-dot"
+        markedDates={markedDates}
+        onDayPress={(day) => setSelectedDate(new Date(`${day.dateString}T00:00:00`))}
+        theme={calendarTheme}
       />
       <FlatList
         data={itemsForSelectedDay}
@@ -314,19 +324,13 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
+    gap: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  header: {
-    fontSize: typography.header,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
+  calendar: {
+    paddingBottom: spacing.sm,
   },
   listContent: {
     paddingTop: spacing.sm,

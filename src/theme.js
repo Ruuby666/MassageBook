@@ -13,8 +13,6 @@ export const colors = {
 };
 
 export const typography = {
-  dayLabel: 13,
-  dateNumber: 17,
   header: 22,
   cardTitle: 16,
   cardBody: 14,
@@ -27,9 +25,4 @@ export const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
-};
-
-export const daySelector = {
-  chipSize: 44,
-  chipRadius: 22,
 };
