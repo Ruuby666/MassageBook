@@ -3,7 +3,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -62,7 +61,6 @@ export default function CalendarScreen() {
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const appointmentsQuery = useMemo(() => query(collection(db, 'reservations'), orderBy('date')), []);
   const blocksQuery = useMemo(() => collection(db, 'blocks'), []);
@@ -114,24 +112,6 @@ export default function CalendarScreen() {
       unsubscribeServices();
     };
   }, [appointmentsQuery, blocksQuery, servicesQuery]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    try {
-      const [appointmentsSnap, blocksSnap, servicesSnap] = await Promise.all([
-        getDocs(appointmentsQuery),
-        getDocs(blocksQuery),
-        getDocs(servicesQuery),
-      ]);
-      setAppointments(toAppointments(appointmentsSnap));
-      setBlocks(toDocs(blocksSnap));
-      setServices(toDocs(servicesSnap));
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar: ' + error.message);
-    } finally {
-      setRefreshing(false);
-    }
-  }
 
   const markedDates = useMemo(() => {
     const marks = {};
@@ -234,13 +214,6 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable onPress={handleRefresh} disabled={refreshing} hitSlop={12}>
-          {refreshing ? (
-            <ActivityIndicator color={colors.textPrimary} size="small" />
-          ) : (
-            <Ionicons name="reload-outline" size={22} color={colors.textPrimary} />
-          )}
-        </Pressable>
         <Pressable onPress={() => navigation.navigate('Masajes')} hitSlop={12}>
           <Ionicons name="pricetags-outline" size={24} color={colors.textPrimary} />
         </Pressable>
