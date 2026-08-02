@@ -29,6 +29,9 @@ const reviewListEl = document.getElementById('review-list');
 const reviewEditButton = document.getElementById('review-edit-button');
 const reviewConfirmButton = document.getElementById('review-confirm-button');
 
+const pendingModal = document.getElementById('pending-modal');
+const pendingCloseButton = document.getElementById('pending-close-button');
+
 let services = [];
 let selectedServiceId = null;
 let pendingReservation = null;
@@ -139,6 +142,14 @@ function closeReviewModal() {
   reviewModal.hidden = true;
 }
 
+function openPendingModal() {
+  pendingModal.hidden = false;
+}
+
+function closePendingModal() {
+  pendingModal.hidden = true;
+}
+
 async function loadServices() {
   try {
     const snapshot = await getDocs(query(collection(db, 'services'), where('enabled', '==', true)));
@@ -237,11 +248,15 @@ reviewConfirmButton.addEventListener('click', async () => {
     selectedServiceId = null;
     renderServiceList();
     renderServiceDetails(null);
-    setMessage('¡Listo! Tu cita quedó reservada. Te llegará un recordatorio por correo.', 'success');
+    openPendingModal();
   } catch (error) {
     closeReviewModal();
     setMessage(error.message || 'No se pudo guardar la reserva. Intenta de nuevo.', 'error');
   } finally {
     reviewConfirmButton.disabled = false;
   }
+});
+
+pendingCloseButton.addEventListener('click', () => {
+  closePendingModal();
 });
