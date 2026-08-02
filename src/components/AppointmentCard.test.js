@@ -52,4 +52,18 @@ describe('AppointmentCard', () => {
     const { getByText } = await render(<AppointmentCard appointment={buildAppointment()} />);
     expect(() => fireEvent.press(getByText('Lucía Fernández'))).not.toThrow();
   });
+
+  it('shows a Pendiente badge when the reservation is pending', async () => {
+    const { getByText } = await render(
+      <AppointmentCard appointment={buildAppointment({ status: 'pending' })} onPress={() => {}} />
+    );
+    expect(getByText('Pendiente')).toBeTruthy();
+  });
+
+  it('does not show a Pendiente badge when the reservation is confirmed', async () => {
+    const { queryByText } = await render(
+      <AppointmentCard appointment={buildAppointment({ status: 'confirmed' })} onPress={() => {}} />
+    );
+    expect(queryByText('Pendiente')).toBeNull();
+  });
 });
