@@ -210,4 +210,140 @@ describe('AppointmentDetailModal', () => {
       expect(onClose).not.toHaveBeenCalled();
     });
   });
+
+  describe('confirming or rejecting a pending reservation', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('does not show confirm/reject buttons when the reservation is confirmed', async () => {
+      const { queryByText } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'confirmed' })}
+          onClose={() => {}}
+        />
+      );
+
+      expect(queryByText('Confirmar reserva')).toBeNull();
+      expect(queryByText('Rechazar')).toBeNull();
+    });
+
+    it('calls onConfirm and closes the modal when confirming succeeds', async () => {
+      const user = userEvent.setup();
+      const onConfirm = jest.fn().mockResolvedValue();
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={onClose}
+          onConfirm={onConfirm}
+        />
+      );
+
+      await user.press(getByTestId('confirm-reservation-button'));
+
+      expect(onConfirm).toHaveBeenCalledWith('apt-1');
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an alert and does not close when confirming fails', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const onConfirm = jest.fn().mockRejectedValue(new Error('No hay conexión.'));
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={onClose}
+          onConfirm={onConfirm}
+        />
+      );
+
+      await user.press(getByTestId('confirm-reservation-button'));
+
+      expect(alertSpy).toHaveBeenCalledWith('No se pudo confirmar', 'No hay conexión.');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('asks for confirmation before rejecting', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={() => {}}
+          onReject={() => {}}
+        />
+      );
+
+      await user.press(getByTestId('reject-reservation-button'));
+
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Rechazar reserva',
+        expect.stringContaining('María López'),
+        expect.any(Array)
+      );
+    });
+
+    it('does not reject when the confirmation is dismissed', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const onReject = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={() => {}}
+          onReject={onReject}
+        />
+      );
+
+      await user.press(getByTestId('reject-reservation-button'));
+
+      expect(onReject).not.toHaveBeenCalled();
+    });
+
+    it('rejects and closes the modal when confirmed', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        buttons.find((button) => button.style === 'destructive').onPress();
+      });
+      const user = userEvent.setup();
+      const onReject = jest.fn().mockResolvedValue();
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={onClose}
+          onReject={onReject}
+        />
+      );
+
+      await user.press(getByTestId('reject-reservation-button'));
+
+      expect(onReject).toHaveBeenCalledWith('apt-1');
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an alert and does not close when rejecting fails', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        if (buttons) {
+          buttons.find((button) => button.style === 'destructive').onPress();
+        }
+      });
+      const user = userEvent.setup();
+      const onReject = jest.fn().mockRejectedValue(new Error('No hay conexión.'));
+      const onClose = jest.fn();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ status: 'pending' })}
+          onClose={onClose}
+          onReject={onReject}
+        />
+      );
+
+      await user.press(getByTestId('reject-reservation-button'));
+
+      expect(alertSpy).toHaveBeenLastCalledWith('No se pudo rechazar', 'No hay conexión.');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+  });
 });
