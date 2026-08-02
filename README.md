@@ -3,7 +3,7 @@
 Sistema de reservas para un masajista independiente a domicilio. Tiene dos lados que comparten una sola base de datos en Firebase:
 
 - **App del terapeuta** (React Native / Expo) — calendario personal donde el terapeuta ve todas sus citas, crea citas manualmente, y bloquea horarios o días completos para que los clientes no puedan reservar ahí.
-- **Formulario web del cliente** (HTML/JS estático en Firebase Hosting) — el cliente abre un link, llena sus datos y elige un horario. La reserva se guarda directo en Firestore y aparece al instante en la app del terapeuta.
+- **Formulario web del cliente** (HTML/JS estático en Firebase Hosting) — el cliente abre un link, llena sus datos y elige un horario. La reserva se guarda en Firestore como **pendiente** y aparece al instante en la app del terapeuta, quien la confirma o rechaza manualmente; el cliente recibe un correo cuando eso pasa.
 
 Diseñado para vivir dentro de las capas gratuitas de Firebase (excepto Cloud Functions, que requiere el plan Blaze aunque el costo real sea $0 con este volumen de uso).
 
@@ -35,12 +35,16 @@ src/
   theme.js                  Colores, tipografía y espaciados compartidos
 
 functions/
-  index.js                 createReservation (único punto de escritura de reservas)
-                             y sendReminders (Cloud Function programada, envía el
-                             recordatorio por correo 2 días antes de cada cita)
+  index.js                 createReservation (único punto de escritura de reservas),
+                             confirmReservation/rejectReservation (revisión manual de
+                             reservas pendientes, envían email) y sendReminders (Cloud
+                             Function programada, envía el recordatorio por correo 2
+                             días antes de cada cita)
   validation.js             Lógica pura de validación/solapamiento de reservas
   reminders.js               Lógica pura de la ventana de fecha y el contenido
                              del correo de recordatorio
+  notifications.js           Lógica pura del contenido de los correos de
+                             confirmación/rechazo
 
 web/
   index.html, styles.css, script.js, firebase-config.js
@@ -52,10 +56,10 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 
 ## Modelo de datos (Firestore)
 
-**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por la Cloud Function `createReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
+**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
 ```
 clientName, phone, email, address, serviceId, service, durationMinutes,
-price, date (Timestamp), notes, createdAt, reminderSent
+price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed')
 ```
 
 **`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
@@ -78,6 +82,8 @@ name, description, durationMinutes, price, materials, enabled, createdAt
 - El **formulario web** no permite reservar en días u horas que la terapeuta haya bloqueado (`blocks`); ella puede seguir agendando sobre su propio bloqueo desde la app si lo necesita.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
+- Reserva del **formulario web** nace en `status: 'pending'` — el terapeuta la confirma o rechaza desde la app (`confirmReservation`/`rejectReservation`). Confirmar envía un email al cliente; rechazar borra la reserva (libera el horario) y también le avisa por email.
+- Reserva creada **manualmente por el terapeuta** nace en `status: 'confirmed'` — no requiere su propia revisión.
 - Cada cita con correo recibe un **recordatorio por email 2 días antes**, una sola vez (`reminderSent`). Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio.
 
 ## Desarrollo local
@@ -103,9 +109,9 @@ npx firebase-tools deploy --only hosting
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
 
-## Recordatorios por correo
+## Recordatorios y notificaciones por correo
 
-`sendReminders` corre todos los días a las **10:00 (hora de Canarias)**, busca citas cuya fecha caiga exactamente 2 días después y les manda un correo (una sola vez, marca `reminderSent: true`). Se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
+`sendReminders` corre todos los días a las **10:00 (hora de Canarias)**, busca citas cuya fecha caiga exactamente 2 días después y les manda un correo (una sola vez, marca `reminderSent: true`). `confirmReservation`/`rejectReservation` reutilizan el mismo transporter para avisar al cliente en cuanto el terapeuta revisa su reserva pendiente. Todo se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
 
 **Configuración (una sola vez):**
 1. En la cuenta de Gmail que va a enviar los correos: activa la verificación en 2 pasos, luego genera una "contraseña de aplicación" en `myaccount.google.com` → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.
