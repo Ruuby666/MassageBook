@@ -21,12 +21,20 @@ const {
   isReminderCandidate,
   buildReminderEmail,
 } = require('./reminders');
+const { buildConfirmationEmail, buildRejectionEmail } = require('./notifications');
 
 initializeApp();
 const db = getFirestore();
 
 const gmailUser = defineSecret('GMAIL_USER');
 const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
+
+function createGmailTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: gmailUser.value(), pass: gmailAppPassword.value() },
+  });
+}
 
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
@@ -98,6 +106,9 @@ exports.createReservation = onCall(async (request) => {
     notes,
     createdAt: Timestamp.now(),
     reminderSent: false,
+    // Manual entries (authenticated therapist) are her own booking — no
+    // review step needed. Public form submissions wait for her to confirm.
+    status: authenticated ? 'confirmed' : 'pending',
   });
 
   return { id: docRef.id };
@@ -192,6 +203,93 @@ exports.deleteReservation = onCall(async (request) => {
   return { id: reservationId };
 });
 
+// Moves a pending reservation (public form only — manual entries are
+// already 'confirmed') into 'confirmed' once the therapist reviews it, and
+// emails the client. An email failure is logged but doesn't fail the call —
+// the confirmation itself must go through even if Gmail is unreachable.
+exports.confirmReservation = onCall(
+  { secrets: [gmailUser, gmailAppPassword] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede confirmar reservas.');
+    }
+
+    const reservationId = String(request.data?.reservationId || '').trim();
+    if (!reservationId) {
+      throw new HttpsError('invalid-argument', 'Falta el id de la reserva.');
+    }
+
+    const reservationRef = db.collection('reservations').doc(reservationId);
+    const reservationSnap = await reservationRef.get();
+    if (!reservationSnap.exists) {
+      throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+    }
+
+    await reservationRef.update({ status: 'confirmed' });
+
+    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
+    if (reservation.email) {
+      try {
+        const { subject, html, text } = buildConfirmationEmail(reservation);
+        await createGmailTransporter().sendMail({
+          from: gmailUser.value(),
+          to: reservation.email,
+          subject,
+          html,
+          text,
+        });
+      } catch (error) {
+        logger.error(`Failed to send confirmation email for reservation ${reservationId}:`, error);
+      }
+    }
+
+    return { id: reservationId };
+  }
+);
+
+// Rejecting frees up the slot immediately — there's no 'rejected' status,
+// the reservation doc is deleted outright. The client is emailed first
+// (before the doc disappears) so we still have their data to address it to.
+exports.rejectReservation = onCall(
+  { secrets: [gmailUser, gmailAppPassword] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede rechazar reservas.');
+    }
+
+    const reservationId = String(request.data?.reservationId || '').trim();
+    if (!reservationId) {
+      throw new HttpsError('invalid-argument', 'Falta el id de la reserva.');
+    }
+
+    const reservationRef = db.collection('reservations').doc(reservationId);
+    const reservationSnap = await reservationRef.get();
+    if (!reservationSnap.exists) {
+      throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+    }
+
+    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
+    if (reservation.email) {
+      try {
+        const { subject, html, text } = buildRejectionEmail(reservation);
+        await createGmailTransporter().sendMail({
+          from: gmailUser.value(),
+          to: reservation.email,
+          subject,
+          html,
+          text,
+        });
+      } catch (error) {
+        logger.error(`Failed to send rejection email for reservation ${reservationId}:`, error);
+      }
+    }
+
+    await reservationRef.delete();
+
+    return { id: reservationId };
+  }
+);
+
 // Daily at 10:00 Canary Islands time — emails clients whose reservation is
 // exactly 2 days away and hasn't already been reminded. Failures for one
 // reservation don't block the rest of the batch.
@@ -215,10 +313,7 @@ exports.sendReminders = onSchedule(
       return;
     }
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: gmailUser.value(), pass: gmailAppPassword.value() },
-    });
+    const transporter = createGmailTransporter();
 
     for (const reservation of candidates) {
       const { subject, html, text } = buildReminderEmail(reservation);
