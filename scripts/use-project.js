@@ -56,10 +56,19 @@ export const firebaseConfig = {
 `;
 fs.writeFileSync(path.join(root, 'web', 'firebase-config.js'), webConfig);
 
-const firebaserc = {
-  projects: { default: vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID },
-};
-fs.writeFileSync(path.join(root, '.firebaserc'), JSON.stringify(firebaserc, null, 2) + '\n');
+// Preserve any existing "targets"/"etags" (hosting multi-site config isn't
+// tied to which project is currently active) — only swap projects.default.
+const firebasercPath = path.join(root, '.firebaserc');
+let firebaserc = {};
+if (fs.existsSync(firebasercPath)) {
+  try {
+    firebaserc = JSON.parse(fs.readFileSync(firebasercPath, 'utf8'));
+  } catch {
+    firebaserc = {};
+  }
+}
+firebaserc.projects = { ...firebaserc.projects, default: vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID };
+fs.writeFileSync(firebasercPath, JSON.stringify(firebaserc, null, 2) + '\n');
 
 console.log(`Switched to "${name}" (${vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID}).`);
 console.log('Updated: .env, web/firebase-config.js, .firebaserc');

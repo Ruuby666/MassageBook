@@ -97,14 +97,18 @@ Para levantar el formulario web localmente: abre `web/index.html` con un servido
 
 ## Desplegar cambios a Firebase
 
+Hosting tiene dos targets: `booking` (el formulario público, `web/`) y `app` (build web
+de Expo, solo existe como sitio en el proyecto demo `massagebook-639a4`). Por eso
+`hosting` siempre se despliega por target, nunca a secas.
+
 ```bash
-# Todo junto
-npx firebase-tools deploy
+# Todo junto (firestore + functions; hosting hay que indicarlo por target, ver abajo)
+npx firebase-tools deploy --except hosting
 
 # O por partes
 npx firebase-tools deploy --only firestore:rules
 npx firebase-tools deploy --only functions
-npx firebase-tools deploy --only hosting
+npx firebase-tools deploy --only hosting:booking
 ```
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
