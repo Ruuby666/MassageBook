@@ -124,6 +124,3 @@ Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva e
    (o `functions:secrets:set NOMBRE` de forma interactiva, pegando el valor cuando lo pida).
 4. Despliega: `npx firebase-tools deploy --only functions`.
 
-## Pendiente / próximas fases
-
-- **WhatsApp** como canal de recordatorio adicional (mencionado en el brief original, no priorizado aún).
