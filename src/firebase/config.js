@@ -1,11 +1,11 @@
-// Replace with the real values from Firebase console > Project settings >
-// General > Your apps > SDK setup and configuration. Keep this in sync with
-// web/firebase-config.js — same Firebase project, same public client config.
+// Values come from EXPO_PUBLIC_FIREBASE_* env vars (see .env.example) so
+// each checkout can point at its own Firebase project without editing
+// committed code. Expo/Metro inlines EXPO_PUBLIC_* vars automatically.
 export const firebaseConfig = {
-  apiKey: 'AIzaSyCT5Yrei8_WD-Zh6fdib-Wkuvgp6ir2lAY',
-  authDomain: 'massagebook-terapeuta.firebaseapp.com',
-  projectId: 'massagebook-terapeuta',
-  storageBucket: 'massagebook-terapeuta.firebasestorage.app',
-  messagingSenderId: '1025482138477',
-  appId: '1:1025482138477:web:87f6bb0143785fe3e1b064',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
