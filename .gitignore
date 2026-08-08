@@ -30,9 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (per-project secrets; see .env.example)
 .env
-.env*.local
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -49,3 +50,7 @@ firestore-debug.log
 ui-debug.log
 functions/node_modules/
 *.apk
+
+# per-checkout Firebase project config (see .example files)
+.firebaserc
+web/firebase-config.js

@@ -10,8 +10,16 @@
       "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
     }
   ],
-  "hosting": {
-    "public": "web",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
-  }
+  "hosting": [
+    {
+      "target": "booking",
+      "public": "web",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    },
+    {
+      "target": "app",
+      "public": "dist",
+      "ignore": ["firebase.json", "**/.*"]
+    }
+  ]
 }

@@ -1,5 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -26,6 +28,10 @@ function MainTabs() {
 export default function App() {
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  // Metro's web bundler (unlike the old webpack config) doesn't
+  // auto-register @expo/vector-icons as web fonts, so icons render as
+  // blank boxes on web until explicitly loaded here.
+  const [fontsLoaded] = useFonts({ ...Ionicons.font });
 
   useEffect(() => {
     return onAuthStateChanged(auth, (nextUser) => {
@@ -37,7 +43,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        {checkingAuth ? (
+        {checkingAuth || !fontsLoaded ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.accent} size="large" />
           </View>
