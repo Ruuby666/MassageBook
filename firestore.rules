@@ -3,14 +3,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Being signed in isn't enough — anyone can create a Firebase Auth
+    // account with the public API key. Only users with a therapists/{uid}
+    // doc (created by hand in the Firebase console) count as the therapist.
+    // The Cloud Functions apply the same check (isTherapist in index.js).
+    function isTherapist() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/therapists/$(request.auth.uid));
+    }
+
+    // Who the therapist is. Managed only from the Firebase console; a user
+    // can read just their own doc.
+    match /therapists/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     // Reservations hold client PII (name, phone, address).
-    // Only the authenticated therapist can read them. All writes go
+    // Only the therapist can read them. All writes go
     // through the createReservation Cloud Function (Admin SDK bypasses
     // these rules), so both the public web form and the therapist's
     // manual-entry flow share one place that enforces fixed durations
     // and the 30-minute buffer between bookings.
     match /reservations/{reservationId} {
-      allow read: if request.auth != null;
+      allow read: if isTherapist();
       allow write: if false;
     }
 
@@ -20,7 +36,7 @@ service cloud.firestore {
     // Only the therapist can create/edit them from the app.
     match /blocks/{blockId} {
       allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow create, update, delete: if isTherapist();
     }
 
     // Massage catalog: public menu info (name/description/duration/price),
@@ -28,7 +44,7 @@ service cloud.firestore {
     // show clients their options. Only the therapist can manage entries.
     match /services/{serviceId} {
       allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow create, update, delete: if isTherapist();
     }
 
     // Expo push tokens of the therapist's phones, written by the app on
@@ -37,7 +53,7 @@ service cloud.firestore {
     // client-side read access; stale tokens are deleted server-side too.
     match /pushTokens/{token} {
       allow read, delete: if false;
-      allow create, update: if request.auth != null
+      allow create, update: if isTherapist()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.token == token;
     }

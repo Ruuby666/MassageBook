@@ -61,7 +61,9 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 
 ## Modelo de datos (Firestore)
 
-**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
+**`therapists`** — quién es la terapeuta: un doc por cuenta con acceso, con id = UID de Firebase Auth (sin campos obligatorios). Estar logueado no basta: las rules y las Cloud Functions solo tratan como terapeuta a quien tenga este doc. Se gestiona solo desde la consola de Firebase (rules bloquean escrituras).
+
+**`reservations`** — solo lectura para la terapeuta; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
 ```
 clientName, phone, email, address, serviceId, service, durationMinutes,
 price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed')
@@ -122,6 +124,14 @@ npx firebase-tools deploy --only hosting:booking
 ```
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
+
+## Acceso de la terapeuta (una sola vez por proyecto)
+
+Hazlo **antes** de desplegar rules/functions, o la terapeuta se queda sin acceso a la app:
+
+1. Firebase Console → Authentication → Users: copia el **UID** de la cuenta de la terapeuta.
+2. Firestore → crea la colección `therapists` con un documento cuyo **ID sea ese UID** (puede tener un campo cualquiera, p. ej. `name`).
+3. Authentication → Settings → User actions: desactiva **"Enable create (sign-up)"**, para que nadie pueda crearse cuentas con la API key pública.
 
 ## Recordatorios y notificaciones por correo
 

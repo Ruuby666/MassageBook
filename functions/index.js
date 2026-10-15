@@ -37,13 +37,31 @@ function createGmailTransporter() {
   });
 }
 
+// Being signed in isn't enough — anyone could create a Firebase Auth
+// account with the public API key. Only users with a `therapists/{uid}`
+// doc (created by hand in the Firebase console) count as the therapist;
+// firestore.rules applies the same check.
+async function isTherapist(auth) {
+  if (!auth) return false;
+  const therapistSnap = await db.collection('therapists').doc(auth.uid).get();
+  return therapistSnap.exists;
+}
+
+async function assertTherapist(request, message) {
+  if (!(await isTherapist(request.auth))) {
+    throw new HttpsError('permission-denied', message);
+  }
+}
+
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
 // (authenticated). See validation.js for the business rules. Duration,
 // display name and price always come from the services catalog doc, never
 // from the client, so a tampered request can't change pricing/duration.
 exports.createReservation = onCall(async (request) => {
-  const authenticated = Boolean(request.auth);
+  // "authenticated" means "the therapist" throughout validation.js. Any
+  // other signed-in account gets the public form's stricter rules.
+  const authenticated = await isTherapist(request.auth);
 
   let reservation;
   try {
@@ -141,9 +159,7 @@ exports.createReservation = onCall(async (request) => {
 // the reservation's own current slot from the conflict check. Resets
 // reminderSent so sendReminders re-evaluates against the new date.
 exports.updateReservationTime = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede editar citas.');
-  }
+  await assertTherapist(request, 'Solo la terapeuta puede editar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -203,9 +219,7 @@ exports.updateReservationTime = onCall(async (request) => {
 // Lets the therapist cancel/delete an existing reservation from the app.
 // Authenticated only, same reasoning as updateReservationTime.
 exports.deleteReservation = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede eliminar citas.');
-  }
+  await assertTherapist(request, 'Solo la terapeuta puede eliminar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -230,9 +244,7 @@ exports.deleteReservation = onCall(async (request) => {
 exports.confirmReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede confirmar reservas.');
-    }
+    await assertTherapist(request, 'Solo la terapeuta puede confirmar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {
@@ -273,9 +285,7 @@ exports.confirmReservation = onCall(
 exports.rejectReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede rechazar reservas.');
-    }
+    await assertTherapist(request, 'Solo la terapeuta puede rechazar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {
