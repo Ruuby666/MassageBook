@@ -28,9 +28,13 @@ function getReminderQueryWindow(now = new Date()) {
   };
 }
 
+// Pending (unconfirmed) bookings are skipped — "your appointment is in 2
+// days" would be misleading if the therapist may still reject it. Older
+// docs without a status predate the review flow and count as confirmed.
 function isReminderCandidate(reservation, targetDateKey) {
   if (!reservation.email) return false;
   if (reservation.reminderSent) return false;
+  if (reservation.status === 'pending') return false;
   return getLocalDateKey(reservation.date) === targetDateKey;
 }
 

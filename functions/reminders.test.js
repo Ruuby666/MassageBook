@@ -74,6 +74,14 @@ describe('isReminderCandidate', () => {
     );
   });
 
+  it('is false while the reservation is still pending', () => {
+    expect(isReminderCandidate(buildReservation({ status: 'pending' }), targetDateKey)).toBe(false);
+  });
+
+  it('is true once the reservation is confirmed', () => {
+    expect(isReminderCandidate(buildReservation({ status: 'confirmed' }), targetDateKey)).toBe(true);
+  });
+
   it('is false when the reservation is not on the target date', () => {
     const reservation = buildReservation({ date: new Date('2026-07-25T10:00:00.000Z') });
     expect(isReminderCandidate(reservation, targetDateKey)).toBe(false);
