@@ -9,9 +9,10 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppointmentCard from '../components/AppointmentCard';
@@ -21,7 +22,8 @@ import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import ExpandableFabMenu from '../components/ExpandableFabMenu';
 import { db, functions } from '../firebase';
-import { colors, spacing } from '../theme';
+import { useNotificationTap } from '../notifications/pushNotifications';
+import { colors, spacing, typography } from '../theme';
 import { isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
 
 const calendarTheme = {
@@ -115,11 +117,15 @@ export default function CalendarScreen() {
   const markedDates = useMemo(() => {
     const marks = {};
 
+    // Pending bookings get their own dot color so days still needing
+    // review stand out from confirmed ones at a glance.
     appointments.forEach((appointment) => {
       const key = toDateKey(new Date(appointment.date));
+      const dotKey = appointment.status === 'pending' ? 'pending' : 'appointment';
+      const dotColor = dotKey === 'pending' ? colors.pending : colors.accent;
       const dots = marks[key]?.dots || [];
-      if (!dots.some((dot) => dot.key === 'appointment')) {
-        marks[key] = { ...marks[key], dots: [...dots, { key: 'appointment', color: colors.accent }] };
+      if (!dots.some((dot) => dot.key === dotKey)) {
+        marks[key] = { ...marks[key], dots: [...dots, { key: dotKey, color: dotColor }] };
       }
     });
 
@@ -135,6 +141,29 @@ export default function CalendarScreen() {
 
     return marks;
   }, [appointments, blocks, selectedDate]);
+
+  // appointments are already ordered by date, so the first one is the
+  // soonest booking still waiting on review.
+  const pendingAppointments = useMemo(
+    () => appointments.filter((appointment) => appointment.status === 'pending'),
+    [appointments]
+  );
+
+  function goToDay(date) {
+    const day = new Date(date);
+    day.setHours(0, 0, 0, 0);
+    setSelectedDate(day);
+  }
+
+  function goToFirstPending() {
+    const first = pendingAppointments[0];
+    if (first) goToDay(first.date);
+  }
+
+  // Tapping a "new booking" push opens the calendar on that booking's day.
+  useNotificationTap((data) => {
+    if (data.date) goToDay(data.date);
+  });
 
   const appointmentsForSelectedDay = useMemo(() => {
     return appointments.filter((appointment) => isSameDay(new Date(appointment.date), selectedDate));
@@ -220,6 +249,17 @@ export default function CalendarScreen() {
         onDayPress={(day) => setSelectedDate(new Date(`${day.dateString}T00:00:00`))}
         theme={calendarTheme}
       />
+      {pendingAppointments.length > 0 && (
+        <Pressable style={styles.pendingBanner} onPress={goToFirstPending} testID="pending-banner">
+          <Ionicons name="time-outline" size={18} color={colors.pending} />
+          <Text style={styles.pendingBannerText}>
+            {pendingAppointments.length === 1
+              ? 'Tienes 1 reserva pendiente de confirmar'
+              : `Tienes ${pendingAppointments.length} reservas pendientes de confirmar`}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.pending} />
+        </Pressable>
+      )}
       <FlatList
         data={itemsForSelectedDay}
         keyExtractor={(item) => item.data.id}
@@ -305,6 +345,23 @@ const styles = StyleSheet.create({
   },
   calendar: {
     paddingBottom: spacing.sm,
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.pendingSurface,
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  pendingBannerText: {
+    flex: 1,
+    fontSize: typography.cardBody,
+    fontWeight: '600',
+    color: colors.pending,
   },
   listContent: {
     paddingTop: spacing.sm,
