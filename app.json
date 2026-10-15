@@ -29,7 +29,13 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "color": "#2D6A5F"
+        }
+      ]
     ]
   }
 }

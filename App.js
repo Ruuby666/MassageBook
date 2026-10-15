@@ -9,6 +9,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { auth } from './src/firebase';
+import { registerForPushNotifications } from './src/notifications/pushNotifications';
 import CalendarScreen from './src/screens/CalendarScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
@@ -39,6 +40,15 @@ export default function App() {
       setCheckingAuth(false);
     });
   }, []);
+
+  // A push failure must never block the app — the pending banner in
+  // CalendarScreen still surfaces new bookings without it.
+  useEffect(() => {
+    if (!user) return;
+    registerForPushNotifications(user.uid).catch((error) => {
+      console.warn('Could not register for push notifications:', error);
+    });
+  }, [user]);
 
   return (
     <GestureHandlerRootView style={styles.root}>
