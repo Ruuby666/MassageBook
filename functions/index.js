@@ -22,6 +22,7 @@ const {
   buildReminderEmail,
 } = require('./reminders');
 const { buildConfirmationEmail, buildRejectionEmail } = require('./notifications');
+const { buildNewReservationPush, sendExpoPush } = require('./push');
 
 initializeApp();
 const db = getFirestore();
@@ -110,6 +111,25 @@ exports.createReservation = onCall(async (request) => {
     // review step needed. Public form submissions wait for her to confirm.
     status: authenticated ? 'confirmed' : 'pending',
   });
+
+  // Public form bookings wait on the therapist's review, so push a
+  // notification to every phone she's logged in on (see pushTokens in
+  // firestore.rules) instead of relying on her opening the app. Manual
+  // entries are her own, no alert needed. Same as the confirm/reject
+  // emails, a push failure is logged but never fails the booking itself.
+  if (!authenticated) {
+    try {
+      const tokensSnapshot = await db.collection('pushTokens').get();
+      const tokens = tokensSnapshot.docs.map((doc) => doc.data().token).filter(Boolean);
+      const { invalidTokens } = await sendExpoPush(
+        tokens,
+        buildNewReservationPush({ clientName, service, date: startDate }, docRef.id)
+      );
+      await Promise.all(invalidTokens.map((token) => db.collection('pushTokens').doc(token).delete()));
+    } catch (error) {
+      logger.error(`Failed to send new-booking push for reservation ${docRef.id}:`, error);
+    }
+  }
 
   return { id: docRef.id };
 });
