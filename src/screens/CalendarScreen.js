@@ -219,8 +219,8 @@ export default function CalendarScreen() {
     setSelectedAppointment(null);
   }
 
-  async function handleDeleteAppointment(reservationId) {
-    await deleteReservation({ reservationId });
+  async function handleDeleteAppointment(reservationId, { notifyClient = false } = {}) {
+    await deleteReservation({ reservationId, notifyClient });
   }
 
   async function handleConfirmReservation(reservationId) {

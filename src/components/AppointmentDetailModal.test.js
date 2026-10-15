@@ -174,9 +174,9 @@ describe('AppointmentDetailModal', () => {
       expect(onDelete).not.toHaveBeenCalled();
     });
 
-    it('deletes and closes the modal when confirmed', async () => {
+    it('deletes, notifies the client and closes the modal on "Eliminar y avisar"', async () => {
       jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
-        buttons.find((button) => button.style === 'destructive').onPress();
+        buttons.find((button) => button.text === 'Eliminar y avisar').onPress();
       });
       const user = userEvent.setup();
       const onDelete = jest.fn().mockResolvedValue();
@@ -187,8 +187,40 @@ describe('AppointmentDetailModal', () => {
 
       await user.press(getByTestId('delete-appointment-button'));
 
-      expect(onDelete).toHaveBeenCalledWith('apt-1');
+      expect(onDelete).toHaveBeenCalledWith('apt-1', { notifyClient: true });
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('deletes without notifying on "Eliminar sin avisar"', async () => {
+      jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
+        buttons.find((button) => button.text === 'Eliminar sin avisar').onPress();
+      });
+      const user = userEvent.setup();
+      const onDelete = jest.fn().mockResolvedValue();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal appointment={buildAppointment()} onClose={() => {}} onDelete={onDelete} />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      expect(onDelete).toHaveBeenCalledWith('apt-1', { notifyClient: false });
+    });
+
+    it('offers no notify option when the appointment has no email', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const { getByTestId } = await render(
+        <AppointmentDetailModal
+          appointment={buildAppointment({ email: '' })}
+          onClose={() => {}}
+          onDelete={() => {}}
+        />
+      );
+
+      await user.press(getByTestId('delete-appointment-button'));
+
+      const buttons = alertSpy.mock.calls[0][2];
+      expect(buttons.map((button) => button.text)).toEqual(['Cancelar', 'Eliminar']);
     });
 
     it('shows an alert and does not close when deleting fails', async () => {

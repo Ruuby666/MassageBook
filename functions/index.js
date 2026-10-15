@@ -21,7 +21,12 @@ const {
   isReminderCandidate,
   buildReminderEmail,
 } = require('./reminders');
-const { buildConfirmationEmail, buildRejectionEmail } = require('./notifications');
+const {
+  buildConfirmationEmail,
+  buildRejectionEmail,
+  buildRescheduleEmail,
+  buildCancellationEmail,
+} = require('./notifications');
 const { buildNewReservationPush, sendExpoPush } = require('./push');
 
 initializeApp();
@@ -51,6 +56,22 @@ async function assertTherapist(request, message) {
   if (!(await isTherapist(request.auth))) {
     throw new HttpsError('permission-denied', message);
   }
+}
+
+// Shared by every client-facing email. A send failure is logged but never
+// fails the calling action — the booking change must go through even if
+// Gmail is unreachable. Manual entries may have no email; then it's a no-op.
+async function sendClientEmail(reservationId, to, { subject, html, text }) {
+  if (!to) return;
+  try {
+    await createGmailTransporter().sendMail({ from: gmailUser.value(), to, subject, html, text });
+  } catch (error) {
+    logger.error(`Failed to send "${subject}" email for reservation ${reservationId}:`, error);
+  }
+}
+
+function toReservation(snapshot) {
+  return { ...snapshot.data(), date: snapshot.data().date.toDate() };
 }
 
 // Single write path for reservations, called by both the public booking
@@ -157,8 +178,9 @@ exports.createReservation = onCall(async (request) => {
 // only creates new ones. Reuses the same overlap logic as createReservation
 // (buffer-free, since this is always an authenticated call), just excluding
 // the reservation's own current slot from the conflict check. Resets
-// reminderSent so sendReminders re-evaluates against the new date.
-exports.updateReservationTime = onCall(async (request) => {
+// reminderSent so sendReminders re-evaluates against the new date, and
+// emails the client the old and new time so they don't miss the change.
+exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
   await assertTherapist(request, 'Solo la terapeuta puede editar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
@@ -213,12 +235,24 @@ exports.updateReservationTime = onCall(async (request) => {
 
   await reservationRef.update({ date: Timestamp.fromDate(startDate), reminderSent: false });
 
+  const previous = toReservation(reservationSnap);
+  if (previous.date.getTime() !== startDate.getTime()) {
+    await sendClientEmail(
+      reservationId,
+      previous.email,
+      buildRescheduleEmail({ ...previous, date: startDate }, previous.date)
+    );
+  }
+
   return { id: reservationId };
 });
 
 // Lets the therapist cancel/delete an existing reservation from the app.
-// Authenticated only, same reasoning as updateReservationTime.
-exports.deleteReservation = onCall(async (request) => {
+// Therapist only, same reasoning as updateReservationTime. The client is
+// emailed only when she asks to (notifyClient) — not every deletion is a
+// real cancellation (e.g. a test or duplicate booking). Emailed before the
+// doc disappears so we still have their data to address it to.
+exports.deleteReservation = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
   await assertTherapist(request, 'Solo la terapeuta puede eliminar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
@@ -230,6 +264,11 @@ exports.deleteReservation = onCall(async (request) => {
   const reservationSnap = await reservationRef.get();
   if (!reservationSnap.exists) {
     throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+  }
+
+  if (request.data?.notifyClient === true) {
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildCancellationEmail(reservation));
   }
 
   await reservationRef.delete();
@@ -259,21 +298,8 @@ exports.confirmReservation = onCall(
 
     await reservationRef.update({ status: 'confirmed' });
 
-    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
-    if (reservation.email) {
-      try {
-        const { subject, html, text } = buildConfirmationEmail(reservation);
-        await createGmailTransporter().sendMail({
-          from: gmailUser.value(),
-          to: reservation.email,
-          subject,
-          html,
-          text,
-        });
-      } catch (error) {
-        logger.error(`Failed to send confirmation email for reservation ${reservationId}:`, error);
-      }
-    }
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildConfirmationEmail(reservation));
 
     return { id: reservationId };
   }
@@ -298,21 +324,8 @@ exports.rejectReservation = onCall(
       throw new HttpsError('not-found', 'Esa reserva ya no existe.');
     }
 
-    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
-    if (reservation.email) {
-      try {
-        const { subject, html, text } = buildRejectionEmail(reservation);
-        await createGmailTransporter().sendMail({
-          from: gmailUser.value(),
-          to: reservation.email,
-          subject,
-          html,
-          text,
-        });
-      } catch (error) {
-        logger.error(`Failed to send rejection email for reservation ${reservationId}:`, error);
-      }
-    }
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildRejectionEmail(reservation));
 
     await reservationRef.delete();
 

@@ -121,28 +121,38 @@ export default function AppointmentDetailModal({
     );
   }
 
+  async function deleteAppointment(notifyClient) {
+    setDeleting(true);
+    try {
+      await onDelete(appointment.id, { notifyClient });
+      onClose();
+    } catch (error) {
+      Alert.alert('No se pudo eliminar', error.message || 'Intenta de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // Not every deletion is a real cancellation (e.g. a test or duplicate
+  // booking), so when there's an email she chooses whether to notify.
   function confirmDelete() {
+    const buttons = appointment.email
+      ? [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Eliminar sin avisar', onPress: () => deleteAppointment(false) },
+          { text: 'Eliminar y avisar', style: 'destructive', onPress: () => deleteAppointment(true) },
+        ]
+      : [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Eliminar', style: 'destructive', onPress: () => deleteAppointment(false) },
+        ];
+
     Alert.alert(
       'Eliminar cita',
-      `¿Eliminar la cita de ${appointment.clientName}? Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await onDelete(appointment.id);
-              onClose();
-            } catch (error) {
-              Alert.alert('No se pudo eliminar', error.message || 'Intenta de nuevo.');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
+      appointment.email
+        ? `¿Eliminar la cita de ${appointment.clientName}? Puedes avisarle por correo de la cancelación. Esta acción no se puede deshacer.`
+        : `¿Eliminar la cita de ${appointment.clientName}? Esta acción no se puede deshacer.`,
+      buttons
     );
   }
 
@@ -224,6 +234,12 @@ export default function AppointmentDetailModal({
                     onChange={handleTimeChange}
                   />
                 )}
+
+                {appointment.email ? (
+                  <Text style={styles.editHint}>
+                    Se avisará a {appointment.clientName} por correo del nuevo horario.
+                  </Text>
+                ) : null}
 
                 <View style={styles.editActions}>
                   <Pressable
@@ -331,6 +347,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginTop: 2,
+  },
+  editHint: {
+    fontSize: typography.cardMeta,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   editActions: {
     flexDirection: 'row',

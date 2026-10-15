@@ -1,4 +1,9 @@
-const { buildConfirmationEmail, buildRejectionEmail } = require('./notifications');
+const {
+  buildConfirmationEmail,
+  buildRejectionEmail,
+  buildRescheduleEmail,
+  buildCancellationEmail,
+} = require('./notifications');
 
 function buildReservation(overrides = {}) {
   return {
@@ -42,6 +47,36 @@ describe('buildRejectionEmail', () => {
     for (const content of [html, text]) {
       expect(content).toContain('María López');
       expect(content).toContain('reagendar');
+    }
+  });
+});
+
+describe('buildRescheduleEmail', () => {
+  it('shows both the old and the new date/time', () => {
+    const previousDate = new Date('2026-07-21T15:00:00.000Z');
+    const { subject, html, text } = buildRescheduleEmail(buildReservation(), previousDate);
+
+    expect(subject).toContain('cambiado de horario');
+    for (const content of [html, text]) {
+      expect(content).toContain('María López');
+      expect(content).toContain('Masaje relajante');
+      // Canary local times (WEST, UTC+1): 15:00Z → 16:00, 10:00Z → 11:00.
+      expect(content).toMatch(/Antes:.*16:00/);
+      expect(content).toMatch(/Ahora:.*11:00/);
+      expect(content).toContain('Calle Falsa 123');
+    }
+  });
+});
+
+describe('buildCancellationEmail', () => {
+  it('includes the client name, service and the cancelled date/time', () => {
+    const { subject, html, text } = buildCancellationEmail(buildReservation());
+
+    expect(subject).toContain('cancelada');
+    for (const content of [html, text]) {
+      expect(content).toContain('María López');
+      expect(content).toContain('Masaje relajante');
+      expect(content).toContain('11:00');
     }
   });
 });
