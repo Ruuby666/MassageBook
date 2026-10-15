@@ -31,6 +31,9 @@ src/
   firebase/
     config.js               Config pública del proyecto Firebase (no es secreta)
     index.js                Inicialización de Auth/Firestore/Functions para la app
+  notifications/pushNotifications.js
+                            Registro del token push del móvil (solo Android) y
+                            manejo del toque en una notificación
   utils/dateHelpers.js      Helpers de fecha/hora (formateo, solapamiento, zonas horarias)
   theme.js                  Colores, tipografía y espaciados compartidos
 
@@ -45,6 +48,8 @@ functions/
                              del correo de recordatorio
   notifications.js           Lógica pura del contenido de los correos de
                              confirmación/rechazo
+  push.js                    Contenido y envío (vía Expo) de la notificación push
+                             de reserva nueva a la terapeuta
 
 web/
   index.html, styles.css, script.js, firebase-config.js
@@ -70,6 +75,11 @@ date ("YYYY-MM-DD"), allDay (bool), startTime, endTime, reason, createdAt
 **`services`** — catálogo de masajes. Lectura pública (sin PII, lo necesita el formulario del cliente), escritura solo del terapeuta autenticado, directo desde la app.
 ```
 name, description, durationMinutes, price, materials, enabled, createdAt
+```
+
+**`pushTokens`** — un doc por móvil de la terapeuta (id = token de Expo). La app solo puede crear/actualizar el suyo; nadie lo lee desde el cliente, solo `createReservation` vía Admin SDK.
+```
+token, uid, platform, updatedAt
 ```
 
 ## Reglas de negocio clave
@@ -127,4 +137,19 @@ Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva e
    ```
    (o `functions:secrets:set NOMBRE` de forma interactiva, pegando el valor cuando lo pida).
 4. Despliega: `npx firebase-tools deploy --only functions`.
+
+## Notificaciones push a la terapeuta (Android)
+
+Cada reserva nueva del **formulario web** le manda una notificación push al móvil de la terapeuta ("Nueva reserva pendiente: cliente · masaje · fecha"); tocarla abre el calendario en ese día. Las reservas que crea ella misma no notifican. Además, en la app un banner muestra cuántas reservas siguen pendientes y los días con pendientes llevan un punto ámbar (sirve de respaldo si una notificación no llega).
+
+Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del móvil en `pushTokens/{token}`; `createReservation` lee esos tokens y envía la notificación a través del servicio push de Expo (gratis, sin claves en el servidor). Los tokens que Expo reporta como inválidos se borran solos.
+
+**Requisitos:** solo **Android**, con una build propia de EAS en un móvil físico. En Expo Go (Android quitó el push remoto en el SDK 53), en emuladores, en iPhone y en la versión web el módulo de notificaciones ni se carga: la app no pide permiso y todo lo demás sigue igual.
+
+**Configuración (una sola vez):**
+1. `npm install -g eas-cli`, `eas login` y `eas init` (esto añade el `projectId` a `app.json`; sin él no hay token).
+2. En Firebase Console → Configuración del proyecto → añade una app Android con el mismo `android.package` de `app.json`, descarga `google-services.json` a la raíz y añade `"googleServicesFile": "./google-services.json"` dentro de `android` en `app.json`.
+3. En Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `eas credentials` → Android → Push Notifications (FCM V1). Esa clave **sí es secreta**: no la subas al repo.
+4. Compila e instala el APK: `eas build -p android --profile preview`.
+5. Despliega rules y functions: `npx firebase-tools deploy --only firestore:rules,functions`.
 
