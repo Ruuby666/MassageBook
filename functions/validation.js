@@ -90,6 +90,20 @@ function getLocalDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Public form only: online bookings must be for tomorrow or later (Canary
+// local calendar day), so the therapist always has time to review a
+// pending request and plan her day. She can still book same-day herself
+// from the app. YYYY-MM-DD keys compare correctly as plain strings.
+function assertNotSameDay(startDate, authenticated, now = new Date()) {
+  if (authenticated) return;
+  if (getLocalDateKey(startDate) <= getLocalDateKey(now)) {
+    throw new ValidationError(
+      'failed-precondition',
+      'Las reservas online deben hacerse con al menos un día de antelación. Elige otro día.'
+    );
+  }
+}
+
 function timeStringToMinutes(timeString) {
   const [hour, minute] = timeString.split(':').map(Number);
   return hour * 60 + minute;
@@ -194,6 +208,7 @@ module.exports = {
   assertFutureDate,
   assertWithinBusinessHours,
   getLocalDateKey,
+  assertNotSameDay,
   assertNotBlocked,
   applyService,
   getOverlapWindow,

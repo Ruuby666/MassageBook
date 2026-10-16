@@ -11,6 +11,7 @@ const {
   assertFutureDate,
   assertWithinBusinessHours,
   getLocalDateKey,
+  assertNotSameDay,
   assertNotBlocked,
   applyService,
   getOverlapWindow,
@@ -88,6 +89,7 @@ exports.createReservation = onCall(async (request) => {
   try {
     reservation = parseReservation(request.data || {}, { authenticated });
     assertFutureDate(reservation.startDate);
+    assertNotSameDay(reservation.startDate, authenticated);
 
     const serviceSnap = await db.collection('services').doc(reservation.serviceId).get();
     reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null, {

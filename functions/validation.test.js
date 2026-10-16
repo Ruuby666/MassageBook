@@ -5,6 +5,7 @@ const {
   assertFutureDate,
   assertWithinBusinessHours,
   getLocalDateKey,
+  assertNotSameDay,
   assertNotBlocked,
   applyService,
   getOverlapWindow,
@@ -148,6 +149,33 @@ describe('assertFutureDate', () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const future = new Date(now.getTime() + 60000);
     expect(() => assertFutureDate(future, now)).not.toThrow();
+  });
+});
+
+describe('assertNotSameDay', () => {
+  // 2026-07-20 12:00 UTC = 13:00 in the Canary Islands (WEST, UTC+1).
+  const now = new Date('2026-07-20T12:00:00.000Z');
+
+  it('throws for a public booking later today (Canary local day)', () => {
+    const laterToday = new Date('2026-07-20T18:00:00.000Z');
+    expect(() => assertNotSameDay(laterToday, false, now)).toThrow(ValidationError);
+  });
+
+  it('compares Canary local days, not UTC days', () => {
+    const justAfterMidnight = new Date('2026-07-20T23:30:00.000Z'); // 00:30 on the 21st local
+    const lateNight = new Date('2026-07-20T22:50:00.000Z'); // 23:50 on the 20th local
+    expect(() => assertNotSameDay(justAfterMidnight, false, lateNight)).not.toThrow();
+    expect(() => assertNotSameDay(lateNight, false, now)).toThrow(ValidationError);
+  });
+
+  it('allows a public booking from tomorrow on', () => {
+    const tomorrowMorning = new Date('2026-07-21T08:00:00.000Z');
+    expect(() => assertNotSameDay(tomorrowMorning, false, now)).not.toThrow();
+  });
+
+  it('lets the therapist book for today from the app', () => {
+    const laterToday = new Date('2026-07-20T18:00:00.000Z');
+    expect(() => assertNotSameDay(laterToday, true, now)).not.toThrow();
   });
 });
 
