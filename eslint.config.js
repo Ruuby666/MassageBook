@@ -15,7 +15,7 @@ module.exports = defineConfig([
     languageOptions: { globals: globals.jest },
   },
   {
-    files: ['scripts/**/*.js', '*.config.js'],
+    files: ['scripts/**/*.js', 'tests/**/*.mjs', '*.config.js'],
     languageOptions: { globals: globals.node },
   },
 ]);
