@@ -16,14 +16,19 @@ const app = initializeApp(firebaseConfig);
 const functions = getFunctions(app);
 const db = getFirestore(app);
 const createReservation = httpsCallable(functions, 'createReservation');
+const getAvailability = httpsCallable(functions, 'getAvailability');
 
 const form = document.getElementById('booking-form');
 const messageEl = document.getElementById('form-message');
 const serviceListEl = document.getElementById('service-list');
 const serviceDetailsEl = document.getElementById('service-details');
-const dateInput = document.getElementById('date-input');
-const timeInput = document.getElementById('time-input');
-const dateAvailabilityEl = document.getElementById('date-availability');
+const availabilityStatusEl = document.getElementById('availability-status');
+const calendarEl = document.getElementById('calendar');
+const calendarTitleEl = document.getElementById('calendar-title');
+const calendarGridEl = document.getElementById('calendar-grid');
+const calendarPrevButton = document.getElementById('calendar-prev');
+const calendarNextButton = document.getElementById('calendar-next');
+const slotsEl = document.getElementById('slots');
 const reviewModal = document.getElementById('review-modal');
 const reviewListEl = document.getElementById('review-list');
 const reviewEditButton = document.getElementById('review-edit-button');
@@ -35,11 +40,68 @@ const pendingCloseButton = document.getElementById('pending-close-button');
 let services = [];
 let selectedServiceId = null;
 let pendingReservation = null;
-let dayFullyBlocked = false;
+
+// Availability for the selected massage, from the getAvailability Cloud
+// Function: dateKey ("YYYY-MM-DD", Canary local day) → [{ time, start }].
+// `start` is the exact instant to book, computed server-side in Canary
+// time, so the client's own device timezone never shifts the booking.
+let availabilityByDate = new Map();
+let bookableDateKeys = [];
+let visibleMonth = null; // { year, month } with month 0-11
+let selectedDateKey = null;
+let selectedSlot = null;
+// Guards against a slow response for a previously selected massage
+// overwriting the calendar of the one picked after it.
+let availabilityRequestId = 0;
+
+// Dates below are built from "YYYY-MM-DD" keys as UTC midnights and always
+// formatted with timeZone 'UTC', so labels show the key's own day/month no
+// matter where the visitor's device is.
+const monthFormatter = new Intl.DateTimeFormat('es-ES', {
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+const dayLabelFormatter = new Intl.DateTimeFormat('es-ES', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  timeZone: 'UTC',
+});
+
+function dateKeyToUtcDate(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function toDateKey(year, month, day) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${year}-${pad(month + 1)}-${pad(day)}`;
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatDayLabel(dateKey) {
+  return capitalize(dayLabelFormatter.format(dateKeyToUtcDate(dateKey)));
+}
 
 function setMessage(text, type) {
   messageEl.textContent = text;
   messageEl.className = `message ${type || ''}`.trim();
+}
+
+// Callable errors carry a "functions/<code>" code. Validation errors from
+// our own Cloud Functions already have a client-friendly Spanish message;
+// anything else (network down, timeout, server crash) would otherwise show
+// raw codes like "internal", so it gets a generic message instead.
+function friendlyErrorMessage(error) {
+  const code = String(error?.code || '').replace('functions/', '');
+  if (['invalid-argument', 'failed-precondition', 'not-found'].includes(code) && error.message) {
+    return error.message;
+  }
+  return 'No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
 }
 
 function renderServiceDetails(service) {
@@ -89,13 +151,140 @@ function renderServiceList() {
     item.className = 'service-item' + (service.id === selectedServiceId ? ' selected' : '');
     item.textContent = service.name;
     item.addEventListener('click', () => {
+      if (selectedServiceId === service.id) return;
       selectedServiceId = service.id;
       renderServiceList();
       renderServiceDetails(service);
+      loadAvailability(service.id);
     });
     serviceListEl.appendChild(item);
   });
 }
+
+function setAvailabilityStatus(text) {
+  availabilityStatusEl.textContent = text;
+  availabilityStatusEl.hidden = !text;
+}
+
+function resetAvailability(statusText) {
+  availabilityByDate = new Map();
+  bookableDateKeys = [];
+  visibleMonth = null;
+  selectedDateKey = null;
+  selectedSlot = null;
+  calendarEl.hidden = true;
+  slotsEl.hidden = true;
+  setAvailabilityStatus(statusText);
+}
+
+async function loadAvailability(serviceId, { keepMessage = false } = {}) {
+  const requestId = ++availabilityRequestId;
+  resetAvailability('Buscando horarios libres…');
+  if (!keepMessage) setMessage('', '');
+
+  try {
+    const { data } = await getAvailability({ serviceId });
+    if (requestId !== availabilityRequestId) return;
+
+    availabilityByDate = new Map(data.days.map((day) => [day.dateKey, day.slots]));
+    bookableDateKeys = data.days.map((day) => day.dateKey);
+
+    const firstAvailable = data.days.find((day) => day.slots.length > 0);
+    if (!firstAvailable) {
+      resetAvailability('No quedan horarios libres para este masaje en los próximos días. Prueba con otro masaje o vuelve más adelante.');
+      return;
+    }
+
+    const [year, month] = firstAvailable.dateKey.split('-').map(Number);
+    visibleMonth = { year, month: month - 1 };
+    setAvailabilityStatus('');
+    calendarEl.hidden = false;
+    renderCalendar();
+  } catch (error) {
+    if (requestId !== availabilityRequestId) return;
+    resetAvailability(friendlyErrorMessage(error));
+  }
+}
+
+function monthIndex({ year, month }) {
+  return year * 12 + month;
+}
+
+function shiftVisibleMonth(delta) {
+  const index = monthIndex(visibleMonth) + delta;
+  visibleMonth = { year: Math.floor(index / 12), month: index % 12 };
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const { year, month } = visibleMonth;
+  calendarTitleEl.textContent = capitalize(monthFormatter.format(new Date(Date.UTC(year, month, 1))));
+
+  const [firstKey, lastKey] = [bookableDateKeys[0], bookableDateKeys[bookableDateKeys.length - 1]];
+  const toMonth = (key) => ({ year: Number(key.slice(0, 4)), month: Number(key.slice(5, 7)) - 1 });
+  calendarPrevButton.disabled = monthIndex(visibleMonth) <= monthIndex(toMonth(firstKey));
+  calendarNextButton.disabled = monthIndex(visibleMonth) >= monthIndex(toMonth(lastKey));
+
+  calendarGridEl.innerHTML = '';
+  // Monday-first grid: getUTCDay() is 0 for Sunday.
+  const leadingBlanks = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+  for (let i = 0; i < leadingBlanks; i += 1) {
+    calendarGridEl.appendChild(document.createElement('span'));
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const dateKey = toDateKey(year, month, day);
+    const slots = availabilityByDate.get(dateKey) || [];
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'calendar-day' + (dateKey === selectedDateKey ? ' selected' : '');
+    button.textContent = String(day);
+    button.disabled = slots.length === 0;
+    button.setAttribute(
+      'aria-label',
+      `${formatDayLabel(dateKey)}${slots.length ? `, ${slots.length} horarios libres` : ', sin disponibilidad'}`
+    );
+    button.addEventListener('click', () => {
+      selectedDateKey = dateKey;
+      selectedSlot = null;
+      renderCalendar();
+      renderSlots();
+    });
+    calendarGridEl.appendChild(button);
+  }
+}
+
+function renderSlots() {
+  slotsEl.innerHTML = '';
+  const slots = availabilityByDate.get(selectedDateKey) || [];
+  if (!selectedDateKey || slots.length === 0) {
+    slotsEl.hidden = true;
+    return;
+  }
+  slotsEl.hidden = false;
+
+  const title = document.createElement('p');
+  title.className = 'slots-title';
+  title.textContent = formatDayLabel(selectedDateKey);
+  slotsEl.appendChild(title);
+
+  slots.forEach((slot) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'slot' + (selectedSlot?.start === slot.start ? ' selected' : '');
+    button.textContent = slot.time;
+    button.setAttribute('aria-pressed', String(selectedSlot?.start === slot.start));
+    button.addEventListener('click', () => {
+      selectedSlot = slot;
+      renderSlots();
+    });
+    slotsEl.appendChild(button);
+  });
+}
+
+calendarPrevButton.addEventListener('click', () => shiftVisibleMonth(-1));
+calendarNextButton.addEventListener('click', () => shiftVisibleMonth(1));
 
 function addReviewRow(label, value) {
   const row = document.createElement('div');
@@ -111,19 +300,6 @@ function addReviewRow(label, value) {
   reviewListEl.appendChild(row);
 }
 
-function formatDateTimeDisplay(date, time) {
-  const parsed = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(parsed.getTime())) return `${date} ${time}`;
-  return parsed.toLocaleString('es-MX', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 function openReviewModal(reservation, service) {
   reviewListEl.innerHTML = '';
   addReviewRow('Nombre', reservation.clientName);
@@ -131,7 +307,10 @@ function openReviewModal(reservation, service) {
   addReviewRow('Correo', reservation.email);
   addReviewRow('Dirección', reservation.address);
   addReviewRow('Masaje', `${service.name} · ${service.durationMinutes} min · $${service.price}`);
-  addReviewRow('Fecha y hora', formatDateTimeDisplay(reservation.date, reservation.time));
+  addReviewRow(
+    'Fecha y hora',
+    `${formatDayLabel(reservation.dateKey)}, ${reservation.slot.time} (hora de Canarias)`
+  );
   if (reservation.notes) {
     addReviewRow('Notas', reservation.notes);
   }
@@ -162,40 +341,17 @@ async function loadServices() {
 
 loadServices();
 
-async function checkDateAvailability() {
-  dayFullyBlocked = false;
-  dateAvailabilityEl.hidden = true;
-
-  const date = dateInput.value;
-  if (!date) return;
-
-  try {
-    const snapshot = await getDocs(query(collection(db, 'blocks'), where('date', '==', date)));
-    dayFullyBlocked = snapshot.docs.some((doc) => doc.data().allDay);
-  } catch (error) {
-    dayFullyBlocked = false;
-  }
-
-  if (dayFullyBlocked) {
-    dateAvailabilityEl.textContent = 'Ese día no hay disponibilidad. Elige otra fecha.';
-    dateAvailabilityEl.hidden = false;
-  }
-  timeInput.disabled = dayFullyBlocked;
-}
-
-dateInput.addEventListener('change', checkDateAvailability);
-
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   setMessage('', '');
 
-  if (dayFullyBlocked) {
-    setMessage('Ese día no hay disponibilidad. Elige otra fecha.', 'error');
+  if (!selectedServiceId) {
+    setMessage('Elige qué masaje quieres.', 'error');
     return;
   }
 
-  if (!selectedServiceId) {
-    setMessage('Elige qué masaje quieres.', 'error');
+  if (!selectedSlot) {
+    setMessage('Elige un día y una hora en el calendario.', 'error');
     return;
   }
 
@@ -205,17 +361,18 @@ form.addEventListener('submit', (event) => {
   const email = formData.get('email').trim();
   const address = formData.get('address').trim();
   const notes = formData.get('notes').trim();
-  const date = formData.get('date');
-  const time = formData.get('time');
-
-  if (!date || !time) {
-    setMessage('Elige una fecha y hora.', 'error');
-    return;
-  }
 
   const service = services.find((item) => item.id === selectedServiceId);
 
-  pendingReservation = { clientName, phone, email, address, notes, date, time };
+  pendingReservation = {
+    clientName,
+    phone,
+    email,
+    address,
+    notes,
+    dateKey: selectedDateKey,
+    slot: selectedSlot,
+  };
   openReviewModal(pendingReservation, service);
 });
 
@@ -226,8 +383,7 @@ reviewEditButton.addEventListener('click', () => {
 reviewConfirmButton.addEventListener('click', async () => {
   if (!pendingReservation) return;
 
-  const { clientName, phone, email, address, notes, date, time } = pendingReservation;
-  const isoDate = new Date(`${date}T${time}:00`).toISOString();
+  const { clientName, phone, email, address, notes, slot } = pendingReservation;
 
   reviewConfirmButton.disabled = true;
   setMessage('Guardando tu reserva...', '');
@@ -239,7 +395,7 @@ reviewConfirmButton.addEventListener('click', async () => {
       email,
       address,
       serviceId: selectedServiceId,
-      date: isoDate,
+      date: slot.start,
       notes,
     });
     closeReviewModal();
@@ -248,10 +404,20 @@ reviewConfirmButton.addEventListener('click', async () => {
     selectedServiceId = null;
     renderServiceList();
     renderServiceDetails(null);
+    resetAvailability('Elige primero un masaje para ver los horarios libres.');
+    setMessage('', '');
     openPendingModal();
   } catch (error) {
     closeReviewModal();
-    setMessage(error.message || 'No se pudo guardar la reserva. Intenta de nuevo.', 'error');
+    const code = String(error?.code || '').replace('functions/', '');
+    if (code === 'failed-precondition' && selectedServiceId) {
+      // Most likely someone else took the slot after the calendar loaded:
+      // refresh it so the client picks from what's actually free now.
+      setMessage(`${friendlyErrorMessage(error)} Hemos actualizado los horarios libres.`, 'error');
+      loadAvailability(selectedServiceId, { keepMessage: true });
+    } else {
+      setMessage(friendlyErrorMessage(error), 'error');
+    }
   } finally {
     reviewConfirmButton.disabled = false;
   }
