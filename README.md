@@ -38,12 +38,15 @@ src/
   theme.js                  Colores, tipografía y espaciados compartidos
 
 functions/
-  index.js                 createReservation (único punto de escritura de reservas),
+  index.js                 getAvailability (horarios libres para el calendario de la web),
+                             createReservation (único punto de escritura de reservas),
                              confirmReservation/rejectReservation (revisión manual de
                              reservas pendientes, envían email) y sendReminders (Cloud
                              Function programada, envía el recordatorio por correo 2
                              días antes de cada cita)
   validation.js             Lógica pura de validación/solapamiento de reservas
+  availability.js            Lógica pura de los huecos libres (reutiliza las reglas
+                             de validation.js para no ofrecer nada que luego se rechace)
   reminders.js               Lógica pura de la ventana de fecha y el contenido
                              del correo de recordatorio
   notifications.js           Lógica pura del contenido de los correos de
@@ -53,7 +56,9 @@ functions/
 
 web/
   index.html, styles.css, script.js, firebase-config.js
-                             Formulario público de reservas (Firebase Hosting)
+                             Formulario público de reservas (Firebase Hosting): el
+                             cliente elige masaje y luego día y hora en un calendario
+                             con solo los horarios libres
 
 firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
                              Configuración del proyecto Firebase
@@ -89,6 +94,8 @@ token, uid, platform, updatedAt
 - La duración de cada masaje la define el terapeuta libremente (en minutos) al crear/editar el masaje en el catálogo — no está limitada a valores fijos.
 - El cliente (formulario web) y el terapeuta (app) **eligen el masaje del mismo catálogo** (`services`) en vez de escribir servicio/duración/precio a mano — el servidor toma esos datos del catálogo, no del request.
 - `enabled` en un masaje solo controla si el **cliente** puede elegirlo en el formulario público; el terapeuta puede seguir agendándolo ella misma aunque esté deshabilitado.
+- El **formulario web** muestra un **calendario de los próximos 30 días** con solo los horarios libres para el masaje elegido (cada 30 min), calculados por la Cloud Function `getAvailability` con las mismas reglas que `createReservation` (horario, bloqueos, colchón). Devuelve solo horas, nunca datos de otros clientes ni el motivo de un bloqueo. Las reservas pendientes también ocupan su hueco. Si alguien se adelanta y ocupa la hora mientras el cliente rellena el formulario, `createReservation` lo rechaza y la web recarga los horarios.
+- El **formulario web** no permite reservar **para el mismo día** (día local de Canarias): como mínimo para mañana. La terapeuta sí puede agendar para hoy desde la app.
 - El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.
 - El **formulario web** solo permite reservar entre **8:00 a.m. y 9:00 p.m.** (hora de Canarias); el masaje tampoco puede terminar después de las 9:00 p.m. La terapeuta puede seguir agendando fuera de ese horario desde la app si lo necesita.
 - El **formulario web** no permite reservar en días u horas que la terapeuta haya bloqueado (`blocks`); ella puede seguir agendando sobre su propio bloqueo desde la app si lo necesita.
