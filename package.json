@@ -52,6 +52,10 @@
     "setupFiles": [
       "./node_modules/react-native-gesture-handler/jestSetup.js",
       "./node_modules/@react-native-community/datetimepicker/jest/index.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/functions/"
     ]
   },
   "private": true
