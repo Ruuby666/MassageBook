@@ -29,6 +29,11 @@ const {
   buildCancellationEmail,
 } = require('./notifications');
 const { buildNewReservationPush, sendExpoPush } = require('./push');
+const {
+  getBookableDateKeys,
+  getAvailabilityQueryWindow,
+  computeAvailability,
+} = require('./availability');
 
 initializeApp();
 const db = getFirestore();
@@ -74,6 +79,64 @@ async function sendClientEmail(reservationId, to, { subject, html, text }) {
 function toReservation(snapshot) {
   return { ...snapshot.data(), date: snapshot.data().date.toDate() };
 }
+
+// Public booking calendar: the free start times for one massage over the
+// next BOOKING_WINDOW_DAYS days (from tomorrow), so clients pick a real
+// slot instead of guessing. Reservations hold client PII and blocks may
+// hold private reasons, so this runs server-side and returns only times —
+// never who booked or why a slot is taken. createReservation re-checks
+// everything, since a slot can be taken between this call and the booking.
+exports.getAvailability = onCall(async (request) => {
+  const serviceId = String(request.data?.serviceId || '').trim();
+  if (!serviceId) {
+    throw new HttpsError('invalid-argument', 'Selecciona un tipo de masaje.');
+  }
+
+  let durationMinutes;
+  try {
+    const serviceSnap = await db.collection('services').doc(serviceId).get();
+    ({ durationMinutes } = applyService({}, serviceSnap.exists ? serviceSnap.data() : null, {
+      authenticated: false,
+    }));
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    throw error;
+  }
+
+  const dateKeys = getBookableDateKeys();
+  const { queryStart, queryEnd } = getAvailabilityQueryWindow(dateKeys);
+
+  const [reservationsSnapshot, blocksSnapshot] = await Promise.all([
+    db
+      .collection('reservations')
+      .where('date', '>=', Timestamp.fromDate(queryStart))
+      .where('date', '<', Timestamp.fromDate(queryEnd))
+      .get(),
+    db
+      .collection('blocks')
+      .where('date', '>=', dateKeys[0])
+      .where('date', '<=', dateKeys[dateKeys.length - 1])
+      .get(),
+  ]);
+
+  const existingReservations = reservationsSnapshot.docs.map((doc) => {
+    const existing = doc.data();
+    const start = existing.date.toDate().getTime();
+    return { start, end: start + existing.durationMinutes * 60000 };
+  });
+
+  return {
+    durationMinutes,
+    days: computeAvailability({
+      dateKeys,
+      durationMinutes,
+      existingReservations,
+      blocks: blocksSnapshot.docs.map((doc) => doc.data()),
+    }),
+  };
+});
 
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
