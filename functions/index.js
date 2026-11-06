@@ -34,6 +34,11 @@ const {
   getAvailabilityQueryWindow,
   computeAvailability,
 } = require('./availability');
+const {
+  isWithinNudgeHours,
+  selectPendingToNudge,
+  buildPendingNudgePush,
+} = require('./therapistAlerts');
 
 initializeApp();
 const db = getFirestore();
@@ -74,6 +79,20 @@ async function sendClientEmail(reservationId, to, { subject, html, text }) {
   } catch (error) {
     logger.error(`Failed to send "${subject}" email for reservation ${reservationId}:`, error);
   }
+}
+
+// Sends one push to every phone the therapist is logged in on (see
+// pushTokens in firestore.rules) and deletes tokens Expo reports as dead.
+// Returns false when there was no phone to send to, so callers can retry
+// on a later run instead of marking the alert as sent. Throws on Expo
+// errors — callers decide whether that should fail anything.
+async function pushToTherapist(message) {
+  const tokensSnapshot = await db.collection('pushTokens').get();
+  const tokens = tokensSnapshot.docs.map((doc) => doc.data().token).filter(Boolean);
+  if (tokens.length === 0) return false;
+  const { invalidTokens } = await sendExpoPush(tokens, message);
+  await Promise.all(invalidTokens.map((token) => db.collection('pushTokens').doc(token).delete()));
+  return true;
 }
 
 function toReservation(snapshot) {
@@ -217,19 +236,14 @@ exports.createReservation = onCall(async (request) => {
   });
 
   // Public form bookings wait on the therapist's review, so push a
-  // notification to every phone she's logged in on (see pushTokens in
-  // firestore.rules) instead of relying on her opening the app. Manual
+  // notification instead of relying on her opening the app. Manual
   // entries are her own, no alert needed. Same as the confirm/reject
   // emails, a push failure is logged but never fails the booking itself.
   if (!authenticated) {
     try {
-      const tokensSnapshot = await db.collection('pushTokens').get();
-      const tokens = tokensSnapshot.docs.map((doc) => doc.data().token).filter(Boolean);
-      const { invalidTokens } = await sendExpoPush(
-        tokens,
+      await pushToTherapist(
         buildNewReservationPush({ clientName, service, date: startDate }, docRef.id)
       );
-      await Promise.all(invalidTokens.map((token) => db.collection('pushTokens').doc(token).delete()));
     } catch (error) {
       logger.error(`Failed to send new-booking push for reservation ${docRef.id}:`, error);
     }
@@ -395,6 +409,41 @@ exports.rejectReservation = onCall(
     await reservationRef.delete();
 
     return { id: reservationId };
+  }
+);
+
+// Every 15 minutes: push alerts for the therapist (see therapistAlerts.js).
+// Pending bookings unreviewed for 2+ hours get one grouped nudge, daytime
+// only. Each alert is flagged on the reservation so it's sent once; nothing is
+// flagged when she has no phone registered, so it's retried next run.
+// One scheduled function for both keeps the project within Cloud
+// Scheduler's free tier (3 jobs; sendReminders is the other one).
+exports.notifyTherapist = onSchedule(
+  { schedule: '*/15 * * * *', timeZone: 'Atlantic/Canary' },
+  async () => {
+    const now = new Date();
+    const toAlert = (doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      date: doc.data().date.toDate(),
+      createdAt: doc.data().createdAt?.toDate(),
+    });
+
+    if (isWithinNudgeHours(now)) {
+      const pendingSnapshot = await db.collection('reservations').where('status', '==', 'pending').get();
+      const pending = selectPendingToNudge(pendingSnapshot.docs.map(toAlert), now);
+      if (pending.length > 0) {
+        try {
+          if (await pushToTherapist(buildPendingNudgePush(pending))) {
+            await Promise.all(
+              pending.map((r) => db.collection('reservations').doc(r.id).update({ pendingReminderSent: true }))
+            );
+          }
+        } catch (error) {
+          logger.error('Failed to send pending-bookings push:', error);
+        }
+      }
+    }
   }
 );
 

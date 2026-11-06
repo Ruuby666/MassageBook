@@ -71,7 +71,8 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 **`reservations`** — solo lectura para la terapeuta; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
 ```
 clientName, phone, email, address, serviceId, service, durationMinutes,
-price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed')
+price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed'),
+pendingReminderSent
 ```
 
 **`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
@@ -159,6 +160,9 @@ Hazlo **antes** de desplegar rules/functions, o la terapeuta se queda sin acceso
 ## Notificaciones push a la terapeuta (Android)
 
 Cada reserva nueva del **formulario web** le manda una notificación push al móvil de la terapeuta ("Nueva reserva pendiente: cliente · masaje · fecha"); tocarla abre el calendario en ese día. Las reservas que crea ella misma no notifican. Además, en la app un banner muestra cuántas reservas siguen pendientes y los días con pendientes llevan un punto ámbar (sirve de respaldo si una notificación no llega).
+
+Además, la Cloud Function programada `notifyTherapist` (cada 15 min) le avisa de:
+- **Reservas sin revisar:** si una reserva lleva 2 h pendiente sin confirmar ni rechazar, un solo push agrupado ("2 reservas sin revisar…"; tocarlo abre el día de la más próxima). Solo entre las 9:00 y las 21:00 (hora de Canarias) y una vez por reserva (`pendingReminderSent`).
 
 Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del móvil en `pushTokens/{token}`; `createReservation` lee esos tokens y envía la notificación a través del servicio push de Expo (gratis, sin claves en el servidor). Los tokens que Expo reporta como inválidos se borran solos.
 
