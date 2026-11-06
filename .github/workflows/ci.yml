@@ -1,0 +1,78 @@
+# Runs every check from the README's "Tests" section on each PR and on
+# pushes to developer/main. Nothing here deploys or needs secrets: builds
+# use no Firebase config, and the emulator tests use a demo project with
+# Gmail and the Expo push service faked.
+name: CI
+
+on:
+  pull_request:
+    branches: [developer, main]
+  push:
+    branches: [developer, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (lint, tests, builds)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --ci
+      # Catches bundling errors (bad imports, syntax) on both platforms.
+      - run: npx expo export --platform web --platform android --output-dir dist
+
+  functions:
+    name: Cloud Functions (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - run: npx jest --ci
+
+  emulator:
+    name: Emulator (Firestore rules, scheduled functions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      # The Firestore emulator runs on Java (firebase-tools 15 needs 21+).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      # test:scheduled loads the functions code, so it needs their deps too.
+      - run: npm ci
+        working-directory: functions
+      - run: npm run test:rules
+      - run: npm run test:scheduled

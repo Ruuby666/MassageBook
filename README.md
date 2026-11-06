@@ -129,6 +129,8 @@ El mismo código genera dos apps independientes, cada una con su proyecto de Fir
 
 ## Tests
 
+GitHub Actions (`.github/workflows/ci.yml`) ejecuta todo esto en cada PR y en cada push a `developer` y `main`, además de compilar la app para web y Android. No despliega nada ni necesita secretos. Para ejecutarlo en local:
+
 ```bash
 npm run lint              # ESLint de la app
 npm test                  # tests de la app
