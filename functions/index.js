@@ -1,3 +1,4 @@
+const { setGlobalOptions } = require('firebase-functions/v2');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
@@ -42,6 +43,12 @@ const {
   buildUpcomingPush,
   UPCOMING_LEAD_MINUTES,
 } = require('./therapistAlerts');
+
+// Cost guard: createReservation and getAvailability are public, and each
+// getAvailability call reads a month of reservations. Capping instances
+// per function stops a script hammering them from scaling the bill up;
+// a one-therapist business never needs more than a couple at once.
+setGlobalOptions({ maxInstances: 5 });
 
 initializeApp();
 const db = getFirestore();
