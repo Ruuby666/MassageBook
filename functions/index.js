@@ -105,6 +105,15 @@ async function pushToTherapist(message) {
   return true;
 }
 
+// Scheduled functions work off the run's intended time (Cloud Scheduler's
+// scheduleTime, a few seconds before "now") rather than the wall clock, so
+// tests can run them at a fixed instant — they can't be tried out in
+// production, where they email and notify real people.
+function scheduledNow(event) {
+  const scheduled = event?.scheduleTime ? new Date(event.scheduleTime) : null;
+  return scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled : new Date();
+}
+
 function toReservation(snapshot) {
   return { ...snapshot.data(), date: snapshot.data().date.toDate() };
 }
@@ -438,8 +447,8 @@ exports.rejectReservation = onCall(
 // Scheduler's free tier (3 jobs; sendReminders is the other one).
 exports.notifyTherapist = onSchedule(
   { schedule: '*/15 * * * *', timeZone: 'Atlantic/Canary' },
-  async () => {
-    const now = new Date();
+  async (event) => {
+    const now = scheduledNow(event);
     const toAlert = (doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -487,8 +496,8 @@ exports.notifyTherapist = onSchedule(
 // Failures for one reservation don't block the rest of the batch.
 exports.sendReminders = onSchedule(
   { schedule: '0 9-21 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
-  async () => {
-    const now = new Date();
+  async (event) => {
+    const now = scheduledNow(event);
     const { queryStart, queryEnd } = getReminderQueryWindow(now);
 
     const snapshot = await db

@@ -10,6 +10,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:rules": "firebase emulators:exec --only firestore --project demo-massagebook \"node tests/firestore-rules.test.mjs\"",
+    "test:scheduled": "firebase emulators:exec --only firestore --project demo-massagebook \"node tests/scheduled-functions.test.cjs\"",
     "lint": "eslint .",
     "use:terapeuta": "node scripts/use-project.js terapeuta",
     "use:mio": "node scripts/use-project.js mio"

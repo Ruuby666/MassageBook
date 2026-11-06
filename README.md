@@ -116,6 +116,18 @@ npx expo start          # luego escanea el QR con Expo Go, o presiona 'a' con un
 
 Para levantar el formulario web localmente: abre `web/index.html` con un servidor estático (necesita HTTPS/localhost para que el SDK de Firebase funcione bien; `npx firebase-tools emulators:start --only hosting` es una opción).
 
+## Tests
+
+```bash
+npm run lint              # ESLint de la app
+npm test                  # tests de la app
+(cd functions && npm test) # tests de las Cloud Functions
+npm run test:rules        # reglas de Firestore en el emulador
+npm run test:scheduled    # sendReminders y notifyTherapist en el emulador
+```
+
+Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y notificaciones a personas reales, así que **no se pueden probar en producción**: `test:scheduled` las ejecuta en el emulador con Gmail y el servicio push sustituidos por falsos que solo anotan lo que se habría enviado, y a una hora fija. Conviene pasarlo antes de cada despliegue de functions. Los dos últimos necesitan Java (para el emulador de Firestore).
+
 ## Desplegar cambios a Firebase
 
 Hosting tiene dos targets: `booking` (el formulario público, `web/`) y `app` (build web
