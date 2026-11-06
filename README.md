@@ -135,7 +135,7 @@ El mismo código genera dos apps independientes, cada una con su proyecto de Fir
 GitHub Actions (`.github/workflows/ci.yml`) ejecuta todo esto en cada PR y en cada push a `developer` y `main`, además de compilar la app para web y Android. No despliega nada ni necesita secretos. Para ejecutarlo en local:
 
 ```bash
-npm run lint              # ESLint de la app
+npm run lint              # ESLint: app, functions/ y web/
 npm test                  # tests de la app
 (cd functions && npm test) # tests de las Cloud Functions
 npm run test:rules        # reglas de Firestore en el emulador
