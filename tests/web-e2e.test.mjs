@@ -230,6 +230,22 @@ try {
   const afterTimes = after.days[0].slots.map((slot) => slot.time);
   check('the booked slot is no longer offered', !afterTimes.includes('11:30') && !afterTimes.includes('12:00'), afterTimes.join(','));
   check('no JavaScript errors on the page', pageErrors.length === 0, pageErrors.join(' | '));
+
+  console.log('massages fail to load (Firestore unreachable)');
+  const offline = await browser.newPage();
+  await offline.setRequestInterception(true);
+  offline.on('request', (request) =>
+    request.url().includes(`:${firestorePort}/`) ? request.abort() : request.continue()
+  );
+  await offline.goto(url, { waitUntil: 'domcontentloaded' });
+  const shownError = await offline
+    .waitForFunction(
+      () => /No pudimos cargar los masajes/.test(document.querySelector('#service-list')?.textContent || ''),
+      { timeout: 60000 }
+    )
+    .then(() => true, () => false);
+  const finalText = await offline.$eval('#service-list', (el) => el.textContent.trim());
+  check('tells the client the massages failed to load, not that there are none', shownError, finalText);
 } finally {
   await browser.close();
   server.close();

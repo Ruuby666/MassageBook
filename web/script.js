@@ -8,7 +8,7 @@ import {
   collection,
   query,
   where,
-  getDocs,
+  getDocsFromServer,
 } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -38,6 +38,7 @@ const pendingModal = document.getElementById('pending-modal');
 const pendingCloseButton = document.getElementById('pending-close-button');
 
 let services = [];
+let servicesLoadFailed = false;
 let selectedServiceId = null;
 let pendingReservation = null;
 
@@ -141,7 +142,11 @@ function renderServiceList() {
   if (services.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'service-loading';
-    empty.textContent = 'No hay masajes disponibles por ahora.';
+    // A failed load (e.g. no connection) must not read as "we have nothing
+    // to offer" — the client would think the business isn't working.
+    empty.textContent = servicesLoadFailed
+      ? 'No pudimos cargar los masajes. Revisa tu conexión y recarga la página.'
+      : 'No hay masajes disponibles por ahora.';
     serviceListEl.appendChild(empty);
     return;
   }
@@ -331,10 +336,16 @@ function closePendingModal() {
 
 async function loadServices() {
   try {
-    const snapshot = await getDocs(query(collection(db, 'services'), where('enabled', '==', true)));
+    // FromServer: plain getDocs answers from the (empty) cache when offline
+    // instead of failing, which would show "no massages" rather than an error.
+    const snapshot = await getDocsFromServer(
+      query(collection(db, 'services'), where('enabled', '==', true))
+    );
     services = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
+    console.error('Could not load massages:', error);
     services = [];
+    servicesLoadFailed = true;
   }
   renderServiceList();
 }
