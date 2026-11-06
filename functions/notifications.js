@@ -2,6 +2,8 @@
 // reviews a pending reservation, kept free of Firestore/nodemailer
 // dependencies so it's unit testable, same pattern as reminders.js.
 
+const { escapeHtml } = require('./html');
+
 const emailDateFormatter = new Intl.DateTimeFormat('es-ES', {
   timeZone: 'Atlantic/Canary',
   weekday: 'long',
@@ -24,10 +26,10 @@ function buildConfirmationEmail(reservation) {
   const subject = 'Tu reserva fue confirmada';
 
   const html = `
-    <p>Hola ${reservation.clientName},</p>
-    <p>Tu cita de <strong>${reservation.service}</strong> (${reservation.durationMinutes} min) quedó confirmada:</p>
+    <p>Hola ${escapeHtml(reservation.clientName)},</p>
+    <p>Tu cita de <strong>${escapeHtml(reservation.service)}</strong> (${reservation.durationMinutes} min) quedó confirmada:</p>
     <p><strong>${dateLabel}, ${timeLabel}</strong></p>
-    <p>Dirección: ${reservation.address}</p>
+    <p>Dirección: ${escapeHtml(reservation.address)}</p>
     ${priceLine}
     <p>¡Gracias por confiar en nosotros!</p>
   `.trim();
@@ -53,7 +55,7 @@ function buildRejectionEmail(reservation) {
   const subject = 'No pudimos confirmar tu horario';
 
   const html = `
-    <p>Hola ${reservation.clientName},</p>
+    <p>Hola ${escapeHtml(reservation.clientName)},</p>
     <p>Lamentablemente no pudimos confirmar tu reserva del <strong>${dateLabel}, ${timeLabel}</strong>.</p>
     <p>Contáctanos para reagendar en otro horario. ¡Gracias por tu comprensión!</p>
   `.trim();
@@ -76,11 +78,11 @@ function buildRescheduleEmail(reservation, previousDate) {
   const subject = 'Tu cita ha cambiado de horario';
 
   const html = `
-    <p>Hola ${reservation.clientName},</p>
-    <p>Tu cita de <strong>${reservation.service}</strong> (${reservation.durationMinutes} min) ha cambiado de horario:</p>
+    <p>Hola ${escapeHtml(reservation.clientName)},</p>
+    <p>Tu cita de <strong>${escapeHtml(reservation.service)}</strong> (${reservation.durationMinutes} min) ha cambiado de horario:</p>
     <p>Antes: <s>${oldLabel}</s></p>
     <p>Ahora: <strong>${newLabel}</strong></p>
-    <p>Dirección: ${reservation.address}</p>
+    <p>Dirección: ${escapeHtml(reservation.address)}</p>
     <p>Si el nuevo horario no te viene bien, responde a este correo.</p>
   `.trim();
 
@@ -105,8 +107,8 @@ function buildCancellationEmail(reservation) {
   const subject = 'Tu cita ha sido cancelada';
 
   const html = `
-    <p>Hola ${reservation.clientName},</p>
-    <p>Tu cita de <strong>${reservation.service}</strong> del <strong>${dateLabel}, ${timeLabel}</strong> ha sido cancelada.</p>
+    <p>Hola ${escapeHtml(reservation.clientName)},</p>
+    <p>Tu cita de <strong>${escapeHtml(reservation.service)}</strong> del <strong>${dateLabel}, ${timeLabel}</strong> ha sido cancelada.</p>
     <p>Si quieres reservar otro horario, responde a este correo.</p>
   `.trim();
 

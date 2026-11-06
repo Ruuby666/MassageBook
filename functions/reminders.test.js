@@ -108,3 +108,11 @@ describe('buildReminderEmail', () => {
     expect(text).not.toContain('Precio');
   });
 });
+
+describe('buildReminderEmail escaping', () => {
+  it('escapes client-submitted fields in the HTML body', () => {
+    const { html } = buildReminderEmail(buildReservation({ clientName: '<b>X</b>' }));
+    expect(html).not.toContain('<b>X</b>');
+    expect(html).toContain('&lt;b&gt;X&lt;/b&gt;');
+  });
+});

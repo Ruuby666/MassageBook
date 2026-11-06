@@ -80,3 +80,22 @@ describe('buildCancellationEmail', () => {
     }
   });
 });
+
+describe('client-submitted fields in email HTML', () => {
+  const malicious = buildReservation({
+    clientName: '<script>alert(1)</script>',
+    address: '<a href="https://evil.example">Calle</a>',
+  });
+
+  it.each([
+    ['confirmation', () => buildConfirmationEmail(malicious)],
+    ['rejection', () => buildRejectionEmail(malicious)],
+    ['reschedule', () => buildRescheduleEmail(malicious, new Date('2026-07-21T15:00:00.000Z'))],
+    ['cancellation', () => buildCancellationEmail(malicious)],
+  ])('are escaped in the %s email', (_, build) => {
+    const { html } = build();
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<a href');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});

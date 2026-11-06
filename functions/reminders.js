@@ -2,6 +2,7 @@
 // / nodemailer dependencies so it's unit testable, same pattern as
 // validation.js.
 const { getLocalDateKey } = require('./validation');
+const { escapeHtml } = require('./html');
 
 const REMINDER_DAYS_BEFORE = 2;
 // Wide enough to cover a full Canary Islands local calendar day regardless
@@ -60,10 +61,10 @@ function buildReminderEmail(reservation) {
   const subject = `Recordatorio: tu ${reservation.service} es en 2 días`;
 
   const html = `
-    <p>Hola ${reservation.clientName},</p>
-    <p>Te recordamos tu cita de <strong>${reservation.service}</strong> (${reservation.durationMinutes} min):</p>
+    <p>Hola ${escapeHtml(reservation.clientName)},</p>
+    <p>Te recordamos tu cita de <strong>${escapeHtml(reservation.service)}</strong> (${reservation.durationMinutes} min):</p>
     <p><strong>${dateLabel}, ${timeLabel}</strong></p>
-    <p>Dirección: ${reservation.address}</p>
+    <p>Dirección: ${escapeHtml(reservation.address)}</p>
     ${priceLine}
     <p>Si necesitas cambiar o cancelar la cita, responde a este correo.</p>
     <p>¡Nos vemos pronto!</p>
