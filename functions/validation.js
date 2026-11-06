@@ -90,6 +90,20 @@ function getLocalDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Public form only: online bookings must be for tomorrow or later (Canary
+// local calendar day), so the therapist always has time to review a
+// pending request and plan her day. She can still book same-day herself
+// from the app. YYYY-MM-DD keys compare correctly as plain strings.
+function assertNotSameDay(startDate, authenticated, now = new Date()) {
+  if (authenticated) return;
+  if (getLocalDateKey(startDate) <= getLocalDateKey(now)) {
+    throw new ValidationError(
+      'failed-precondition',
+      'Las reservas online deben hacerse con al menos un día de antelación. Elige otro día.'
+    );
+  }
+}
+
 function timeStringToMinutes(timeString) {
   const [hour, minute] = timeString.split(':').map(Number);
   return hour * 60 + minute;
@@ -98,20 +112,24 @@ function timeStringToMinutes(timeString) {
 // Public form only, same exception as the buffer/business hours/enabled
 // checks — the therapist can still book over her own block from the app.
 // blocksForDay are the `blocks` docs already filtered to this local date.
-function assertNotBlocked(startDate, durationMinutes, blocksForDay, authenticated) {
-  if (authenticated) return;
-
+// Predicate shared by assertNotBlocked and the availability calendar
+// (availability.js), so both apply exactly the same rule.
+function isBlocked(startDate, durationMinutes, blocksForDay) {
   const startMinutes = getLocalMinutesOfDay(startDate);
   const endMinutes = startMinutes + durationMinutes;
 
-  const isBlocked = blocksForDay.some((block) => {
+  return blocksForDay.some((block) => {
     if (block.allDay) return true;
     const blockStart = timeStringToMinutes(block.startTime);
     const blockEnd = timeStringToMinutes(block.endTime);
     return startMinutes < blockEnd && blockStart < endMinutes;
   });
+}
 
-  if (isBlocked) {
+function assertNotBlocked(startDate, durationMinutes, blocksForDay, authenticated) {
+  if (authenticated) return;
+
+  if (isBlocked(startDate, durationMinutes, blocksForDay)) {
     throw new ValidationError('failed-precondition', 'Ese horario no está disponible. Elige otra hora.');
   }
 }
@@ -120,13 +138,16 @@ function assertNotBlocked(startDate, durationMinutes, blocksForDay, authenticate
 // hours from the app, same exception pattern as the buffer and `enabled`.
 // Checks both ends of the appointment so a massage starting before 21:00
 // can't run past it.
+function isWithinBusinessHours(startDate, durationMinutes) {
+  const startMinutes = getLocalMinutesOfDay(startDate);
+  const endMinutes = startMinutes + durationMinutes;
+  return startMinutes >= BUSINESS_HOURS_START * 60 && endMinutes <= BUSINESS_HOURS_END * 60;
+}
+
 function assertWithinBusinessHours(startDate, durationMinutes, authenticated) {
   if (authenticated) return;
 
-  const startMinutes = getLocalMinutesOfDay(startDate);
-  const endMinutes = startMinutes + durationMinutes;
-
-  if (startMinutes < BUSINESS_HOURS_START * 60 || endMinutes > BUSINESS_HOURS_END * 60) {
+  if (!isWithinBusinessHours(startDate, durationMinutes)) {
     throw new ValidationError(
       'invalid-argument',
       'Solo se puede reservar entre las 8:00 a.m. y las 9:00 p.m.'
@@ -180,6 +201,16 @@ function getOverlapWindow(startDate, durationMinutes, authenticated) {
   };
 }
 
+// Keys of the per-day lock docs a booking must hold while it checks for
+// overlaps and saves (see bookSlotAtomically in index.js): the Canary
+// local day where its range (incl. buffer) starts and, if different,
+// where it ends — so two bookings that could overlap always share a lock.
+function getSlotLockKeys(rangeStart, rangeEnd) {
+  const startKey = getLocalDateKey(new Date(rangeStart));
+  const endKey = getLocalDateKey(new Date(rangeEnd));
+  return startKey === endKey ? [startKey] : [startKey, endKey];
+}
+
 function hasOverlap(rangeStart, rangeEnd, existingReservations) {
   return existingReservations.some(({ start, end }) => rangeStart < end && start < rangeEnd);
 }
@@ -189,13 +220,19 @@ module.exports = {
   QUERY_MARGIN_HOURS,
   BUSINESS_HOURS_START,
   BUSINESS_HOURS_END,
+  BUSINESS_TIMEZONE,
   ValidationError,
   parseReservation,
   assertFutureDate,
+  isWithinBusinessHours,
   assertWithinBusinessHours,
   getLocalDateKey,
+  getLocalMinutesOfDay,
+  assertNotSameDay,
+  isBlocked,
   assertNotBlocked,
   applyService,
   getOverlapWindow,
+  getSlotLockKeys,
   hasOverlap,
 };

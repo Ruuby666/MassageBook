@@ -47,7 +47,7 @@ describe('ServicePicker', () => {
     );
     expect(getByText('Masaje suave para liberar tensión.')).toBeTruthy();
     expect(getByText('60 min')).toBeTruthy();
-    expect(getByText('$60')).toBeTruthy();
+    expect(getByText('€60')).toBeTruthy();
     expect(getByText('Se utiliza: Aceite esencial de lavanda')).toBeTruthy();
   });
 

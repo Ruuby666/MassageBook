@@ -38,16 +38,25 @@
         </div>
         <div class="service-details" id="service-details" hidden></div>
 
-        <label>
-          Fecha
-          <input type="date" name="date" id="date-input" required />
-        </label>
-        <p class="field-hint" id="date-availability" hidden></p>
-
-        <label>
-          Hora
-          <input type="time" name="time" id="time-input" min="08:00" max="21:00" required />
-        </label>
+        <div class="field-label">Elige día y hora</div>
+        <div class="availability">
+          <p class="service-loading" id="availability-status">
+            Elige primero un masaje para ver los horarios libres.
+          </p>
+          <div class="calendar" id="calendar" hidden>
+            <div class="calendar-header">
+              <button type="button" class="calendar-nav" id="calendar-prev" aria-label="Mes anterior">‹</button>
+              <span class="calendar-title" id="calendar-title"></span>
+              <button type="button" class="calendar-nav" id="calendar-next" aria-label="Mes siguiente">›</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+            <p class="calendar-note">Las reservas online se hacen con al menos un día de antelación. Horario de Canarias.</p>
+          </div>
+          <div class="slots" id="slots" hidden></div>
+        </div>
 
         <label>
           Notas (opcional)

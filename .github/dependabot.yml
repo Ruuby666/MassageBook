@@ -1,0 +1,29 @@
+# Weekly dependency update PRs against `developer`. Minor/patch bumps are
+# grouped into one PR per folder to keep the noise down.
+version: 2
+updates:
+  # Expo app. Major bumps are ignored: Expo SDK packages must move together
+  # (`npx expo install --fix` / an SDK upgrade), not one by one.
+  - package-ecosystem: npm
+    directory: /
+    target-branch: developer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      app-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Cloud Functions.
+  - package-ecosystem: npm
+    directory: /functions
+    target-branch: developer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      functions-minor-and-patch:
+        update-types: [minor, patch]

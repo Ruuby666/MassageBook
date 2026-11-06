@@ -112,4 +112,13 @@ describe('locale-formatted labels', () => {
     const iso = '2026-07-15T09:05:00';
     expect(formatTime(iso)).toBe(formatTimeString('09:05'));
   });
+
+  it('uses 24-hour times (Spain), not a.m./p.m.', () => {
+    expect(formatTimeString('17:30')).toBe('17:30');
+    expect(formatTime('2026-07-15T09:05:00')).toBe('09:05');
+  });
+
+  it('uses Spanish month and weekday names', () => {
+    expect(formatFullDate(new Date(2026, 6, 15))).toBe('Miércoles, 15 de julio');
+  });
 });

@@ -12,7 +12,7 @@ try {
   authInstance = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
-} catch (error) {
+} catch {
   // Fast Refresh re-runs this module without resetting the native Firebase
   // app, which makes a second initializeAuth() call throw.
   authInstance = getAuth(app);

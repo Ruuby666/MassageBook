@@ -1,3 +1,7 @@
+// Spain (the business is in the Canary Islands): 24-hour times and
+// Spanish month/day names everywhere in the app.
+const LOCALE = 'es-ES';
+
 export function isSameDay(a, b) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -7,7 +11,7 @@ export function isSameDay(a, b) {
 }
 
 export function formatTime(isoDate) {
-  return new Date(isoDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return new Date(isoDate).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
 }
 
 export function toDateKey(date) {
@@ -18,7 +22,7 @@ export function toDateKey(date) {
 }
 
 export function formatFullDate(date) {
-  const label = date.toLocaleDateString('es-MX', {
+  const label = date.toLocaleDateString(LOCALE, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -40,7 +44,7 @@ export function dateToTimeString(date) {
 }
 
 export function formatTimeString(timeString) {
-  return timeStringToDate(new Date(), timeString).toLocaleTimeString('es-MX', {
+  return timeStringToDate(new Date(), timeString).toLocaleTimeString(LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
   });

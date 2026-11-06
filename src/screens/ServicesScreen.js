@@ -44,7 +44,7 @@ function ServiceRow({ item, onOpen, onToggleEnabled }) {
         <View style={styles.cardInfo}>
           <Text style={styles.cardName}>{item.name}</Text>
           <Text style={styles.cardMeta}>
-            {item.durationMinutes} min · ${item.price}
+            {item.durationMinutes} min · €{item.price}
           </Text>
         </View>
         <Switch
