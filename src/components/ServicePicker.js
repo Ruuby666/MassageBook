@@ -40,7 +40,7 @@ export default function ServicePicker({ services, selectedId, onSelect }) {
           <View style={styles.detailsMetaRow}>
             <Text style={styles.detailsMeta}>{selected.durationMinutes} min</Text>
             <Text style={styles.detailsMeta}>·</Text>
-            <Text style={styles.detailsMeta}>${selected.price}</Text>
+            <Text style={styles.detailsMeta}>€{selected.price}</Text>
           </View>
           {selected.materials ? (
             <Text style={styles.detailsMaterials}>Se utiliza: {selected.materials}</Text>

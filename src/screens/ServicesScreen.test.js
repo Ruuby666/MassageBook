@@ -56,7 +56,7 @@ describe('ServicesScreen', () => {
 
     expect(getByText('isisisi')).toBeTruthy();
     expect(getByText('nonon')).toBeTruthy();
-    expect(getByText('60 min · $60')).toBeTruthy();
+    expect(getByText('60 min · €60')).toBeTruthy();
   });
 
   it('navigates back to Calendario when the back arrow is pressed', async () => {

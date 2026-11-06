@@ -124,7 +124,7 @@ function renderServiceDetails(service) {
 
   const meta = document.createElement('p');
   meta.className = 'service-meta';
-  meta.textContent = `${service.durationMinutes} min · $${service.price}`;
+  meta.textContent = `${service.durationMinutes} min · €${service.price}`;
   serviceDetailsEl.appendChild(meta);
 
   if (service.materials) {
@@ -306,7 +306,7 @@ function openReviewModal(reservation, service) {
   addReviewRow('Teléfono', reservation.phone);
   addReviewRow('Correo', reservation.email);
   addReviewRow('Dirección', reservation.address);
-  addReviewRow('Masaje', `${service.name} · ${service.durationMinutes} min · $${service.price}`);
+  addReviewRow('Masaje', `${service.name} · ${service.durationMinutes} min · €${service.price}`);
   addReviewRow(
     'Fecha y hora',
     `${formatDayLabel(reservation.dateKey)}, ${reservation.slot.time} (hora de Canarias)`
