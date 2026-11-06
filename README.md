@@ -42,8 +42,8 @@ functions/
                              createReservation (único punto de escritura de reservas),
                              confirmReservation/rejectReservation (revisión manual de
                              reservas pendientes, envían email) y sendReminders (Cloud
-                             Function programada, envía el recordatorio por correo 2
-                             días antes de cada cita)
+                             Function programada, envía el recordatorio por correo en
+                             las 48 h previas a cada cita)
   validation.js             Lógica pura de validación/solapamiento de reservas
   availability.js            Lógica pura de los huecos libres (reutiliza las reglas
                              de validation.js para no ofrecer nada que luego se rechace)
@@ -105,7 +105,7 @@ token, uid, platform, updatedAt
 - Reserva del **formulario web** nace en `status: 'pending'` — el terapeuta la confirma o rechaza desde la app (`confirmReservation`/`rejectReservation`). Confirmar envía un email al cliente; rechazar borra la reserva (libera el horario) y también le avisa por email.
 - Reserva creada **manualmente por el terapeuta** nace en `status: 'confirmed'` — no requiere su propia revisión.
 - Si la terapeuta **cambia el horario** de una cita (`updateReservationTime`), el cliente recibe un correo con el horario anterior y el nuevo. Si la **elimina** (`deleteReservation`), ella elige en la app si avisarle por correo o no (no toda eliminación es una cancelación real).
-- Cada cita con correo recibe un **recordatorio por email 2 días antes**, una sola vez (`reminderSent`). Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio, y las reservas aún **pendientes** de confirmar tampoco (la terapeuta todavía podría rechazarlas).
+- Cada cita confirmada con correo recibe un **recordatorio por email en las 48 h previas**, una sola vez (`reminderSent`). También las reservas con poca antelación o confirmadas tarde; solo se espera a que la reserva tenga 12 h, para no llegar justo detrás del correo de confirmación. Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio, y las reservas aún **pendientes** de confirmar tampoco (la terapeuta todavía podría rechazarlas).
 
 ## Desarrollo local
 
@@ -144,7 +144,7 @@ Hazlo **antes** de desplegar rules/functions, o la terapeuta se queda sin acceso
 
 ## Recordatorios y notificaciones por correo
 
-`sendReminders` corre todos los días a las **10:00 (hora de Canarias)**, busca citas cuya fecha caiga exactamente 2 días después y les manda un correo (una sola vez, marca `reminderSent: true`). `confirmReservation`/`rejectReservation` reutilizan el mismo transporter para avisar al cliente en cuanto el terapeuta revisa su reserva pendiente. Todo se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
+`sendReminders` corre **cada hora de 9:00 a 21:00 (hora de Canarias)**, busca citas confirmadas en las próximas 48 h que aún no tengan recordatorio y les manda un correo (una sola vez, marca `reminderSent: true`). `confirmReservation`/`rejectReservation` reutilizan el mismo transporter para avisar al cliente en cuanto el terapeuta revisa su reserva pendiente. Todo se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
 
 **Configuración (una sola vez):**
 1. En la cuenta de Gmail que va a enviar los correos: activa la verificación en 2 pasos, luego genera una "contraseña de aplicación" en `myaccount.google.com` → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.

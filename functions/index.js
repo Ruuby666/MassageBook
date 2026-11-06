@@ -480,26 +480,34 @@ exports.notifyTherapist = onSchedule(
   }
 );
 
-// Daily at 10:00 Canary Islands time — emails clients whose reservation is
-// exactly 2 days away and hasn't already been reminded. Failures for one
-// reservation don't block the rest of the batch.
+// Hourly from 9:00 to 21:00 Canary Islands time — emails clients whose
+// confirmed reservation is within the next 48 hours and hasn't been
+// reminded yet (see isReminderCandidate). Running hourly instead of once
+// a day means short-notice and late-confirmed bookings still get one.
+// Failures for one reservation don't block the rest of the batch.
 exports.sendReminders = onSchedule(
-  { schedule: '0 10 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
+  { schedule: '0 9-21 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
   async () => {
-    const { targetDateKey, queryStart, queryEnd } = getReminderQueryWindow();
+    const now = new Date();
+    const { queryStart, queryEnd } = getReminderQueryWindow(now);
 
     const snapshot = await db
       .collection('reservations')
-      .where('date', '>=', Timestamp.fromDate(queryStart))
-      .where('date', '<', Timestamp.fromDate(queryEnd))
+      .where('date', '>', Timestamp.fromDate(queryStart))
+      .where('date', '<=', Timestamp.fromDate(queryEnd))
       .get();
 
     const candidates = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate() }))
-      .filter((reservation) => isReminderCandidate(reservation, targetDateKey));
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+      }))
+      .filter((reservation) => isReminderCandidate(reservation, now));
 
     if (candidates.length === 0) {
-      logger.info(`No reminders to send for ${targetDateKey}.`);
+      logger.info('No reminders to send.');
       return;
     }
 

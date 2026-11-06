@@ -1,42 +1,36 @@
-// Pure logic for the "2 days before" email reminder, kept free of Firestore
-// / nodemailer dependencies so it's unit testable, same pattern as
-// validation.js.
-const { getLocalDateKey } = require('./validation');
+// Pure logic for the client's email reminder, kept free of Firestore /
+// nodemailer dependencies so it's unit testable, same pattern as
+// validation.js. sendReminders runs hourly during the day and reminds
+// every confirmed appointment coming up in the next REMINDER_WINDOW_HOURS
+// — not only those exactly 2 days away, so short-notice bookings and ones
+// confirmed late still get their reminder.
 const { escapeHtml } = require('./html');
 
-const REMINDER_DAYS_BEFORE = 2;
-// Wide enough to cover a full Canary Islands local calendar day regardless
-// of which side of the WET/WEST DST boundary it falls on, then callers
-// filter precisely with isReminderCandidate — same over-fetch-then-filter
-// pattern as getOverlapWindow in validation.js.
-const QUERY_MARGIN_HOURS = 36;
+const REMINDER_WINDOW_HOURS = 48;
+// Skip bookings made in the last few hours: the client just booked (and,
+// for web bookings, gets a confirmation email), so a reminder right after
+// would be noise. They're picked up on a later run instead.
+const RECENT_BOOKING_HOURS = 12;
 
-// Returns the Firestore query window that's guaranteed to contain every
-// reservation whose local calendar date is exactly REMINDER_DAYS_BEFORE
-// days from now.
 function getReminderQueryWindow(now = new Date()) {
-  const targetInstant = new Date(now.getTime() + REMINDER_DAYS_BEFORE * 24 * 60 * 60 * 1000);
-  const targetDateKey = getLocalDateKey(targetInstant);
-  // Midday UTC on the target date is safely inside that local day no
-  // matter the DST offset (Canary is always UTC+0 or UTC+1).
-  const anchor = new Date(`${targetDateKey}T12:00:00Z`);
-  const marginMs = QUERY_MARGIN_HOURS * 60 * 60000;
-
   return {
-    targetDateKey,
-    queryStart: new Date(anchor.getTime() - marginMs),
-    queryEnd: new Date(anchor.getTime() + marginMs),
+    queryStart: now,
+    queryEnd: new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60000),
   };
 }
 
-// Pending (unconfirmed) bookings are skipped — "your appointment is in 2
-// days" would be misleading if the therapist may still reject it. Older
-// docs without a status predate the review flow and count as confirmed.
-function isReminderCandidate(reservation, targetDateKey) {
+// Pending (unconfirmed) bookings are skipped — a reminder would be
+// misleading if the therapist may still reject it. Older docs without a
+// status predate the review flow and count as confirmed.
+function isReminderCandidate(reservation, now = new Date()) {
   if (!reservation.email) return false;
   if (reservation.reminderSent) return false;
   if (reservation.status === 'pending') return false;
-  return getLocalDateKey(reservation.date) === targetDateKey;
+  const { queryStart, queryEnd } = getReminderQueryWindow(now);
+  const start = reservation.date.getTime();
+  if (start <= queryStart.getTime() || start > queryEnd.getTime()) return false;
+  const recentCutoff = now.getTime() - RECENT_BOOKING_HOURS * 60 * 60000;
+  return !reservation.createdAt || reservation.createdAt.getTime() <= recentCutoff;
 }
 
 const emailDateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -58,7 +52,7 @@ function buildReminderEmail(reservation) {
   const priceLine =
     typeof reservation.price === 'number' ? `<p>Precio: €${reservation.price}</p>` : '';
 
-  const subject = `Recordatorio: tu ${reservation.service} es en 2 días`;
+  const subject = `Recordatorio: tu ${reservation.service} el ${dateLabel} a las ${timeLabel}`;
 
   const html = `
     <p>Hola ${escapeHtml(reservation.clientName)},</p>
@@ -86,8 +80,8 @@ function buildReminderEmail(reservation) {
 }
 
 module.exports = {
-  REMINDER_DAYS_BEFORE,
-  QUERY_MARGIN_HOURS,
+  REMINDER_WINDOW_HOURS,
+  RECENT_BOOKING_HOURS,
   getReminderQueryWindow,
   isReminderCandidate,
   buildReminderEmail,

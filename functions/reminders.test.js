@@ -1,5 +1,6 @@
 const {
-  REMINDER_DAYS_BEFORE,
+  REMINDER_WINDOW_HOURS,
+  RECENT_BOOKING_HOURS,
   getReminderQueryWindow,
   isReminderCandidate,
   buildReminderEmail,
@@ -19,72 +20,57 @@ function buildReservation(overrides = {}) {
   };
 }
 
-describe('REMINDER_DAYS_BEFORE', () => {
-  it('is 2 days', () => {
-    expect(REMINDER_DAYS_BEFORE).toBe(2);
-  });
-});
+// 20 July 2026 10:00 UTC = 11:00 in the Canary Islands (WEST, UTC+1).
+const NOW = new Date('2026-07-20T10:00:00.000Z');
+const hoursFromNow = (h) => new Date(NOW.getTime() + h * 60 * 60000);
 
 describe('getReminderQueryWindow', () => {
-  it('targets the local calendar date exactly 2 days from now', () => {
-    // 10:00 UTC on the 20th is 11:00 local (WEST, UTC+1) on the 20th.
-    const now = new Date('2026-07-20T10:00:00.000Z');
-    const { targetDateKey } = getReminderQueryWindow(now);
-    expect(targetDateKey).toBe('2026-07-22');
-  });
-
-  it('produces a query window that fully contains the target local day', () => {
-    const now = new Date('2026-07-20T10:00:00.000Z');
-    const { targetDateKey, queryStart, queryEnd } = getReminderQueryWindow(now);
-
-    // The target day's local midnight and last instant, both in WEST (UTC+1).
-    const localDayStart = new Date(`${targetDateKey}T00:00:00+01:00`);
-    const localDayEnd = new Date(`${targetDateKey}T23:59:59+01:00`);
-
-    expect(queryStart.getTime()).toBeLessThan(localDayStart.getTime());
-    expect(queryEnd.getTime()).toBeGreaterThan(localDayEnd.getTime());
-  });
-
-  it('handles the winter (WET, UTC+0) offset too', () => {
-    const now = new Date('2026-01-20T10:00:00.000Z');
-    const { targetDateKey, queryStart, queryEnd } = getReminderQueryWindow(now);
-    expect(targetDateKey).toBe('2026-01-22');
-
-    const localDayStart = new Date(`${targetDateKey}T00:00:00+00:00`);
-    const localDayEnd = new Date(`${targetDateKey}T23:59:59+00:00`);
-    expect(queryStart.getTime()).toBeLessThan(localDayStart.getTime());
-    expect(queryEnd.getTime()).toBeGreaterThan(localDayEnd.getTime());
+  it('covers the next REMINDER_WINDOW_HOURS from now', () => {
+    const { queryStart, queryEnd } = getReminderQueryWindow(NOW);
+    expect(REMINDER_WINDOW_HOURS).toBe(48);
+    expect(queryStart).toEqual(NOW);
+    expect(queryEnd).toEqual(hoursFromNow(48));
   });
 });
 
 describe('isReminderCandidate', () => {
-  const targetDateKey = '2026-07-22';
+  // Booked well before, appointment in 30 h: the normal case.
+  const candidate = (overrides = {}) =>
+    buildReservation({ date: hoursFromNow(30), createdAt: hoursFromNow(-72), ...overrides });
 
-  it('is true for a matching, unreminded reservation with an email', () => {
-    expect(isReminderCandidate(buildReservation(), targetDateKey)).toBe(true);
+  it('is true for a confirmed, unreminded reservation within the next 48 h', () => {
+    expect(isReminderCandidate(candidate(), NOW)).toBe(true);
+    expect(isReminderCandidate(candidate({ status: 'confirmed' }), NOW)).toBe(true);
+  });
+
+  it('covers short-notice bookings too (appointment in a few hours)', () => {
+    expect(isReminderCandidate(candidate({ date: hoursFromNow(3) }), NOW)).toBe(true);
   });
 
   it('is false when there is no email (therapist manual entry may omit it)', () => {
-    expect(isReminderCandidate(buildReservation({ email: '' }), targetDateKey)).toBe(false);
+    expect(isReminderCandidate(candidate({ email: '' }), NOW)).toBe(false);
   });
 
   it('is false when the reminder was already sent', () => {
-    expect(isReminderCandidate(buildReservation({ reminderSent: true }), targetDateKey)).toBe(
-      false
-    );
+    expect(isReminderCandidate(candidate({ reminderSent: true }), NOW)).toBe(false);
   });
 
   it('is false while the reservation is still pending', () => {
-    expect(isReminderCandidate(buildReservation({ status: 'pending' }), targetDateKey)).toBe(false);
+    expect(isReminderCandidate(candidate({ status: 'pending' }), NOW)).toBe(false);
   });
 
-  it('is true once the reservation is confirmed', () => {
-    expect(isReminderCandidate(buildReservation({ status: 'confirmed' }), targetDateKey)).toBe(true);
+  it('is false beyond 48 h or once the appointment has started', () => {
+    expect(isReminderCandidate(candidate({ date: hoursFromNow(49) }), NOW)).toBe(false);
+    expect(isReminderCandidate(candidate({ date: hoursFromNow(-1) }), NOW)).toBe(false);
   });
 
-  it('is false when the reservation is not on the target date', () => {
-    const reservation = buildReservation({ date: new Date('2026-07-25T10:00:00.000Z') });
-    expect(isReminderCandidate(reservation, targetDateKey)).toBe(false);
+  it(`waits ${RECENT_BOOKING_HOURS} h after booking so it doesn't land right after the confirmation`, () => {
+    expect(isReminderCandidate(candidate({ createdAt: hoursFromNow(-2) }), NOW)).toBe(false);
+    expect(isReminderCandidate(candidate({ createdAt: hoursFromNow(-13) }), NOW)).toBe(true);
+  });
+
+  it('treats legacy reservations without createdAt as old enough', () => {
+    expect(isReminderCandidate(candidate({ createdAt: undefined }), NOW)).toBe(true);
   });
 });
 
