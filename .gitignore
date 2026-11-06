@@ -54,3 +54,6 @@ functions/node_modules/
 # per-checkout Firebase project config (see .example files)
 .firebaserc
 web/firebase-config.js
+
+# per-Firebase-project Android config, one per app variant (see app.config.js)
+google-services*.json

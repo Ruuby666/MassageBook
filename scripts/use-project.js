@@ -21,7 +21,9 @@ if (!fs.existsSync(sourceEnvPath)) {
 }
 
 const envContents = fs.readFileSync(sourceEnvPath, 'utf8');
-fs.writeFileSync(path.join(root, '.env'), envContents);
+// APP_VARIANT tells app.config.js which app (name/package) to build.
+const variantLine = /^APP_VARIANT=/m.test(envContents) ? '' : `APP_VARIANT=${name}\n`;
+fs.writeFileSync(path.join(root, '.env'), `${envContents.trimEnd()}\n${variantLine}`);
 
 const vars = {};
 for (const line of envContents.split('\n')) {
@@ -71,4 +73,4 @@ firebaserc.projects = { ...firebaserc.projects, default: vars.EXPO_PUBLIC_FIREBA
 fs.writeFileSync(firebasercPath, JSON.stringify(firebaserc, null, 2) + '\n');
 
 console.log(`Switched to "${name}" (${vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID}).`);
-console.log('Updated: .env, web/firebase-config.js, .firebaserc');
+console.log('Updated: .env (incl. APP_VARIANT), web/firebase-config.js, .firebaserc');

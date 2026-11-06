@@ -116,6 +116,17 @@ npx expo start          # luego escanea el QR con Expo Go, o presiona 'a' con un
 
 Para levantar el formulario web localmente: abre `web/index.html` con un servidor estático (necesita HTTPS/localhost para que el SDK de Firebase funcione bien; `npx firebase-tools emulators:start --only hosting` es una opción).
 
+## Dos apps: la de la terapeuta y la demo
+
+El mismo código genera dos apps independientes, cada una con su proyecto de Firebase. Como tienen paquetes distintos, se pueden instalar las dos en el mismo móvil.
+
+| Variante | Para | Nombre | Paquete Android | Firebase |
+|---|---|---|---|---|
+| `terapeuta` | la terapeuta (uso real) | MassageBook | `io.github.ruuby666.massagebook` | `massagebook-terapeuta` |
+| `mio` | portfolio / demo | MassageBook Demo | `io.github.ruuby666.massagebook.demo` | `massagesbooking` |
+
+`app.config.js` elige la variante con `APP_VARIANT` (por defecto `mio`, para no generar nunca la app de la terapeuta por error). En local la fija `npm run use:terapeuta` / `npm run use:mio`, que además cambia `.env`, `web/firebase-config.js` y `.firebaserc` al proyecto correspondiente. Para las notificaciones push en Android, cada proyecto de Firebase tiene su `google-services.json`: guárdalo como `google-services.terapeuta.json` / `google-services.mio.json` en la raíz (están en `.gitignore`).
+
 ## Tests
 
 ```bash
