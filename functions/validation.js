@@ -201,6 +201,16 @@ function getOverlapWindow(startDate, durationMinutes, authenticated) {
   };
 }
 
+// Keys of the per-day lock docs a booking must hold while it checks for
+// overlaps and saves (see bookSlotAtomically in index.js): the Canary
+// local day where its range (incl. buffer) starts and, if different,
+// where it ends — so two bookings that could overlap always share a lock.
+function getSlotLockKeys(rangeStart, rangeEnd) {
+  const startKey = getLocalDateKey(new Date(rangeStart));
+  const endKey = getLocalDateKey(new Date(rangeEnd));
+  return startKey === endKey ? [startKey] : [startKey, endKey];
+}
+
 function hasOverlap(rangeStart, rangeEnd, existingReservations) {
   return existingReservations.some(({ start, end }) => rangeStart < end && start < rangeEnd);
 }
@@ -223,5 +233,6 @@ module.exports = {
   assertNotBlocked,
   applyService,
   getOverlapWindow,
+  getSlotLockKeys,
   hasOverlap,
 };

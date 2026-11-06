@@ -55,6 +55,7 @@ await check('cannot register a token under a mismatched id', assertFails(setDoc(
 await check('cannot read push tokens', assertFails(getDoc(doc(therapist, `pushTokens/${TOKEN}`))));
 await check('reads own therapists doc', assertSucceeds(getDoc(doc(therapist, 'therapists/therapist1'))));
 await check('cannot write therapists', assertFails(setDoc(doc(therapist, 'therapists/therapist1'), { name: 'Y' })));
+await check('cannot touch booking locks', assertFails(setDoc(doc(therapist, 'slotLocks/2030-07-15'), { x: 1 })));
 
 console.log('stranger (signed in, no therapists doc)');
 await check('cannot read reservations', assertFails(getDocs(collection(stranger, 'reservations'))));
@@ -73,6 +74,7 @@ await check('reads services', assertSucceeds(getDocs(collection(anon, 'services'
 await check('cannot read reservations', assertFails(getDocs(collection(anon, 'reservations'))));
 await check('cannot create blocks', assertFails(setDoc(doc(anon, 'blocks/b4'), { allDay: true })));
 await check('cannot list therapists', assertFails(getDocs(collection(anon, 'therapists'))));
+await check('cannot read booking locks', assertFails(getDoc(doc(anon, 'slotLocks/2030-07-15'))));
 
 await env.cleanup();
 console.log(`\n${passed} passed, ${failed} failed`);

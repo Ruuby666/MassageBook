@@ -47,6 +47,13 @@ service cloud.firestore {
       allow create, update, delete: if isTherapist();
     }
 
+    // Per-day locks that serialize bookings so two clients can't take the
+    // same slot at once (bookSlotAtomically in index.js). Only the Cloud
+    // Functions (Admin SDK) use them.
+    match /slotLocks/{dateKey} {
+      allow read, write: if false;
+    }
+
     // Expo push tokens of the therapist's phones, written by the app on
     // login (doc id = the token itself, so re-registering just overwrites).
     // Only createReservation reads them, via the Admin SDK, so nobody needs

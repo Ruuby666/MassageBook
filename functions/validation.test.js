@@ -9,6 +9,7 @@ const {
   assertNotBlocked,
   applyService,
   getOverlapWindow,
+  getSlotLockKeys,
   hasOverlap,
 } = require('./validation');
 
@@ -317,5 +318,24 @@ describe('hasOverlap', () => {
 
     const farEnough = getOverlapWindow(new Date('2026-07-20T17:00:00.000Z'), 30, false);
     expect(hasOverlap(farEnough.rangeStart, farEnough.rangeEnd, existing)).toBe(false);
+  });
+});
+describe('getSlotLockKeys', () => {
+  it('uses one lock for a range within one Canary local day', () => {
+    // 10:00–11:00 local on 15 July (summer, UTC+1).
+    const start = Date.parse('2030-07-15T09:00:00.000Z');
+    expect(getSlotLockKeys(start, start + 60 * 60000)).toEqual(['2030-07-15']);
+  });
+
+  it('uses both days when the range crosses local midnight', () => {
+    // 23:30 local on the 15th to 00:30 local on the 16th.
+    const start = Date.parse('2030-07-15T22:30:00.000Z');
+    expect(getSlotLockKeys(start, start + 60 * 60000)).toEqual(['2030-07-15', '2030-07-16']);
+  });
+
+  it('follows the local day, not the UTC day', () => {
+    // 00:30 local on the 16th is still the 15th in UTC.
+    const start = Date.parse('2030-07-15T23:30:00.000Z');
+    expect(getSlotLockKeys(start, start + 30 * 60000)).toEqual(['2030-07-16']);
   });
 });

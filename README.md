@@ -85,6 +85,8 @@ date ("YYYY-MM-DD"), allDay (bool), startTime, endTime, reason, createdAt
 name, description, durationMinutes, price, materials, enabled, createdAt
 ```
 
+**`slotLocks`** — un doc por día (id = "YYYY-MM-DD", día de Canarias) que solo usan las Cloud Functions para poner en fila las reservas de ese día. Sin acceso desde el cliente.
+
 **`pushTokens`** — un doc por móvil de la terapeuta (id = token de Expo). La app solo puede crear/actualizar el suyo; nadie lo lee desde el cliente, solo `createReservation` vía Admin SDK.
 ```
 token, uid, platform, updatedAt
@@ -102,6 +104,7 @@ token, uid, platform, updatedAt
 - El **formulario web** no permite reservar en días u horas que la terapeuta haya bloqueado (`blocks`); ella puede seguir agendando sobre su propio bloqueo desde la app si lo necesita.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
+- **Reservas simultáneas:** si dos personas reservan la misma hora a la vez, se la queda la primera en completar el proceso; la otra recibe "Ese horario ya está ocupado" (y la web le recarga los horarios). La comprobación y el guardado van en una transacción de Firestore que además toma el cerrojo del día en `slotLocks`. Lo mismo al cambiar la hora de una cita.
 - Reserva del **formulario web** nace en `status: 'pending'` — el terapeuta la confirma o rechaza desde la app (`confirmReservation`/`rejectReservation`). Confirmar envía un email al cliente; rechazar borra la reserva (libera el horario) y también le avisa por email.
 - Reserva creada **manualmente por el terapeuta** nace en `status: 'confirmed'` — no requiere su propia revisión.
 - Si la terapeuta **cambia el horario** de una cita (`updateReservationTime`), el cliente recibe un correo con el horario anterior y el nuevo. Si la **elimina** (`deleteReservation`), ella elige en la app si avisarle por correo o no (no toda eliminación es una cancelación real).
@@ -137,6 +140,7 @@ npm test                  # tests de la app
 (cd functions && npm test) # tests de las Cloud Functions
 npm run test:rules        # reglas de Firestore en el emulador
 npm run test:scheduled    # sendReminders y notifyTherapist en el emulador
+npm run test:booking      # 5 reservas simultáneas de la misma hora: solo entra una
 ```
 
 Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y notificaciones a personas reales, así que **no se pueden probar en producción**: `test:scheduled` las ejecuta en el emulador con Gmail y el servicio push sustituidos por falsos que solo anotan lo que se habría enviado, y a una hora fija. Conviene pasarlo antes de cada despliegue de functions. Los dos últimos necesitan Java (para el emulador de Firestore).

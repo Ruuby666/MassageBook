@@ -16,6 +16,7 @@ const {
   assertNotBlocked,
   applyService,
   getOverlapWindow,
+  getSlotLockKeys,
   hasOverlap,
 } = require('./validation');
 const {
@@ -112,6 +113,52 @@ async function pushToTherapist(message) {
 function scheduledNow(event) {
   const scheduled = event?.scheduleTime ? new Date(event.scheduleTime) : null;
   return scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled : new Date();
+}
+
+const SLOT_TAKEN_MESSAGE = 'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.';
+
+// Checks the slot is free and saves the booking as one Firestore
+// transaction, so two clients booking the same slot at the same moment
+// can't both get it: whoever completes first wins, the other gets
+// SLOT_TAKEN_MESSAGE. A transaction alone doesn't see a *new* reservation
+// another transaction is inserting, so both also take the per-day lock
+// docs in `slotLocks` (see getSlotLockKeys) — that queues bookings for
+// the same day, and a retried loser re-reads and finds the slot taken.
+// `write(tx)` queues the reservation write; reads all happen before it.
+async function bookSlotAtomically({ startDate, durationMinutes, authenticated, excludeId }, write) {
+  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
+    startDate,
+    durationMinutes,
+    authenticated
+  );
+  const lockRefs = getSlotLockKeys(rangeStart, rangeEnd).map((key) =>
+    db.collection('slotLocks').doc(key)
+  );
+
+  await db.runTransaction(async (tx) => {
+    await Promise.all(lockRefs.map((ref) => tx.get(ref)));
+    const nearbySnapshot = await tx.get(
+      db
+        .collection('reservations')
+        .where('date', '>=', Timestamp.fromDate(queryStart))
+        .where('date', '<', Timestamp.fromDate(queryEnd))
+    );
+
+    const existingReservations = nearbySnapshot.docs
+      .filter((doc) => doc.id !== excludeId)
+      .map((doc) => {
+        const existing = doc.data();
+        const start = existing.date.toDate().getTime();
+        return { start, end: start + existing.durationMinutes * 60000 };
+      });
+
+    if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
+      throw new HttpsError('failed-precondition', SLOT_TAKEN_MESSAGE);
+    }
+
+    lockRefs.forEach((ref) => tx.set(ref, { lastBookingAt: Timestamp.now() }));
+    write(tx);
+  });
 }
 
 function toReservation(snapshot) {
@@ -211,48 +258,27 @@ exports.createReservation = onCall(async (request) => {
 
   const { clientName, phone, email, address, serviceId, service, durationMinutes, price, notes, startDate } =
     reservation;
-  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
-    startDate,
-    durationMinutes,
-    authenticated
+
+  const docRef = db.collection('reservations').doc();
+  await bookSlotAtomically({ startDate, durationMinutes, authenticated }, (tx) =>
+    tx.create(docRef, {
+      clientName,
+      phone,
+      email,
+      address,
+      serviceId,
+      service,
+      durationMinutes,
+      price,
+      date: Timestamp.fromDate(startDate),
+      notes,
+      createdAt: Timestamp.now(),
+      reminderSent: false,
+      // Manual entries (authenticated therapist) are her own booking — no
+      // review step needed. Public form submissions wait for her to confirm.
+      status: authenticated ? 'confirmed' : 'pending',
+    })
   );
-
-  const nearbySnapshot = await db
-    .collection('reservations')
-    .where('date', '>=', Timestamp.fromDate(queryStart))
-    .where('date', '<', Timestamp.fromDate(queryEnd))
-    .get();
-
-  const existingReservations = nearbySnapshot.docs.map((doc) => {
-    const existing = doc.data();
-    const start = existing.date.toDate().getTime();
-    return { start, end: start + existing.durationMinutes * 60000 };
-  });
-
-  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
-    );
-  }
-
-  const docRef = await db.collection('reservations').add({
-    clientName,
-    phone,
-    email,
-    address,
-    serviceId,
-    service,
-    durationMinutes,
-    price,
-    date: Timestamp.fromDate(startDate),
-    notes,
-    createdAt: Timestamp.now(),
-    reminderSent: false,
-    // Manual entries (authenticated therapist) are her own booking — no
-    // review step needed. Public form submissions wait for her to confirm.
-    status: authenticated ? 'confirmed' : 'pending',
-  });
 
   // Public form bookings wait on the therapist's review, so push a
   // notification instead of relying on her opening the app. Manual
@@ -304,40 +330,19 @@ exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] 
   }
   const { durationMinutes } = reservationSnap.data();
 
-  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
-    startDate,
-    durationMinutes,
-    true
+  // Same atomic check-and-save as createReservation, ignoring the
+  // reservation's own current slot. Both reminder flags reset so the
+  // client email and the therapist's "next appointment" push are
+  // re-evaluated against the new time.
+  await bookSlotAtomically(
+    { startDate, durationMinutes, authenticated: true, excludeId: reservationId },
+    (tx) =>
+      tx.update(reservationRef, {
+        date: Timestamp.fromDate(startDate),
+        reminderSent: false,
+        therapistReminderSent: false,
+      })
   );
-
-  const nearbySnapshot = await db
-    .collection('reservations')
-    .where('date', '>=', Timestamp.fromDate(queryStart))
-    .where('date', '<', Timestamp.fromDate(queryEnd))
-    .get();
-
-  const existingReservations = nearbySnapshot.docs
-    .filter((doc) => doc.id !== reservationId)
-    .map((doc) => {
-      const existing = doc.data();
-      const start = existing.date.toDate().getTime();
-      return { start, end: start + existing.durationMinutes * 60000 };
-    });
-
-  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
-    );
-  }
-
-  // Both reminder flags reset so the client email and the therapist's
-  // "next appointment" push are re-evaluated against the new time.
-  await reservationRef.update({
-    date: Timestamp.fromDate(startDate),
-    reminderSent: false,
-    therapistReminderSent: false,
-  });
 
   const previous = toReservation(reservationSnap);
   if (previous.date.getTime() !== startDate.getTime()) {

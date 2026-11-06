@@ -76,3 +76,4 @@ jobs:
         working-directory: functions
       - run: npm run test:rules
       - run: npm run test:scheduled
+      - run: npm run test:booking
