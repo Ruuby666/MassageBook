@@ -72,7 +72,7 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 ```
 clientName, phone, email, address, serviceId, service, durationMinutes,
 price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed'),
-pendingReminderSent
+pendingReminderSent, therapistReminderSent
 ```
 
 **`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
@@ -163,6 +163,9 @@ Cada reserva nueva del **formulario web** le manda una notificación push al mó
 
 Además, la Cloud Function programada `notifyTherapist` (cada 15 min) le avisa de:
 - **Reservas sin revisar:** si una reserva lleva 2 h pendiente sin confirmar ni rechazar, un solo push agrupado ("2 reservas sin revisar…"; tocarlo abre el día de la más próxima). Solo entre las 9:00 y las 21:00 (hora de Canarias) y una vez por reserva (`pendingReminderSent`).
+- **Próxima cita:** unos 45–60 min antes de cada cita confirmada, un push con la hora, el cliente, el masaje y la dirección (a diferencia del de reserva nueva, este sí muestra la dirección: es a donde tiene que ir). Una vez por cita (`therapistReminderSent`, que se reinicia si se cambia la hora).
+
+Ambos avisos van en una sola función programada para quedarse dentro de los 3 trabajos gratuitos de Cloud Scheduler (`sendReminders` es el otro). Si la terapeuta no tiene ningún móvil registrado, no se marca nada y se reintenta en la siguiente pasada.
 
 Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del móvil en `pushTokens/{token}`; `createReservation` lee esos tokens y envía la notificación a través del servicio push de Expo (gratis, sin claves en el servidor). Los tokens que Expo reporta como inválidos se borran solos.
 

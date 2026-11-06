@@ -2,6 +2,8 @@ const {
   isWithinNudgeHours,
   selectPendingToNudge,
   buildPendingNudgePush,
+  selectUpcoming,
+  buildUpcomingPush,
 } = require('./therapistAlerts');
 
 // 20 July 2026 12:00 UTC = 13:00 in the Canary Islands (WEST, UTC+1).
@@ -88,5 +90,41 @@ describe('buildPendingNudgePush', () => {
 
   it('keeps the client phone off the lock screen', () => {
     expect(buildPendingNudgePush([reservation()]).body).not.toContain('600123456');
+  });
+});
+
+describe('selectUpcoming', () => {
+  const soon = (overrides = {}) =>
+    reservation({ status: 'confirmed', date: new Date(NOW.getTime() + minutes(50)), ...overrides });
+
+  it('picks a confirmed appointment starting within the hour', () => {
+    expect(selectUpcoming([soon()], NOW)).toHaveLength(1);
+  });
+
+  it('also covers legacy reservations without a status', () => {
+    expect(selectUpcoming([soon({ status: undefined })], NOW)).toHaveLength(1);
+  });
+
+  it('skips appointments further than an hour away', () => {
+    expect(selectUpcoming([soon({ date: new Date(NOW.getTime() + minutes(75)) })], NOW)).toEqual([]);
+  });
+
+  it('skips pending ones, already alerted ones and past ones', () => {
+    const pending = soon({ status: 'pending' });
+    const alerted = soon({ therapistReminderSent: true });
+    const past = soon({ date: new Date(NOW.getTime() - minutes(5)) });
+    expect(selectUpcoming([pending, alerted, past], NOW)).toEqual([]);
+  });
+});
+
+describe('buildUpcomingPush', () => {
+  it('shows the Canary local time, client, service and address', () => {
+    const r = reservation({ date: new Date('2026-07-20T13:00:00.000Z') }); // 14:00 local
+    const push = buildUpcomingPush(r);
+    expect(push.title).toBe('Próxima cita a las 14:00');
+    expect(push.body).toContain('María López');
+    expect(push.body).toContain('Masaje relajante');
+    expect(push.body).toContain('Calle Triana 12');
+    expect(push.data).toEqual({ reservationId: 'r1', date: '2026-07-20T13:00:00.000Z' });
   });
 });

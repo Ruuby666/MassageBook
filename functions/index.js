@@ -38,6 +38,9 @@ const {
   isWithinNudgeHours,
   selectPendingToNudge,
   buildPendingNudgePush,
+  selectUpcoming,
+  buildUpcomingPush,
+  UPCOMING_LEAD_MINUTES,
 } = require('./therapistAlerts');
 
 initializeApp();
@@ -312,7 +315,13 @@ exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] 
     );
   }
 
-  await reservationRef.update({ date: Timestamp.fromDate(startDate), reminderSent: false });
+  // Both reminder flags reset so the client email and the therapist's
+  // "next appointment" push are re-evaluated against the new time.
+  await reservationRef.update({
+    date: Timestamp.fromDate(startDate),
+    reminderSent: false,
+    therapistReminderSent: false,
+  });
 
   const previous = toReservation(reservationSnap);
   if (previous.date.getTime() !== startDate.getTime()) {
@@ -413,8 +422,10 @@ exports.rejectReservation = onCall(
 );
 
 // Every 15 minutes: push alerts for the therapist (see therapistAlerts.js).
-// Pending bookings unreviewed for 2+ hours get one grouped nudge, daytime
-// only. Each alert is flagged on the reservation so it's sent once; nothing is
+//  - Pending bookings unreviewed for 2+ hours get one grouped nudge,
+//    daytime only.
+//  - Confirmed appointments get a heads-up ~1 hour before, with address.
+// Each alert is flagged on the reservation so it's sent once; nothing is
 // flagged when she has no phone registered, so it's retried next run.
 // One scheduled function for both keeps the project within Cloud
 // Scheduler's free tier (3 jobs; sendReminders is the other one).
@@ -442,6 +453,21 @@ exports.notifyTherapist = onSchedule(
         } catch (error) {
           logger.error('Failed to send pending-bookings push:', error);
         }
+      }
+    }
+
+    const upcomingSnapshot = await db
+      .collection('reservations')
+      .where('date', '>', Timestamp.fromDate(now))
+      .where('date', '<=', Timestamp.fromDate(new Date(now.getTime() + UPCOMING_LEAD_MINUTES * 60000)))
+      .get();
+    for (const reservation of selectUpcoming(upcomingSnapshot.docs.map(toAlert), now)) {
+      try {
+        if (await pushToTherapist(buildUpcomingPush(reservation))) {
+          await db.collection('reservations').doc(reservation.id).update({ therapistReminderSent: true });
+        }
+      } catch (error) {
+        logger.error(`Failed to send upcoming push for reservation ${reservation.id}:`, error);
       }
     }
   }
