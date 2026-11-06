@@ -24,6 +24,7 @@ import ExpandableFabMenu from '../components/ExpandableFabMenu';
 import { db, functions } from '../firebase';
 import { useNotificationTap } from '../notifications/pushNotifications';
 import { colors, spacing, typography } from '../theme';
+import '../utils/calendarLocale';
 import { isSameDay, timeStringToDate, toDateKey } from '../utils/dateHelpers';
 
 const calendarTheme = {
@@ -244,6 +245,7 @@ export default function CalendarScreen() {
       <Calendar
         style={styles.calendar}
         current={toDateKey(selectedDate)}
+        firstDay={1}
         markingType="multi-dot"
         markedDates={markedDates}
         onDayPress={(day) => setSelectedDate(new Date(`${day.dateString}T00:00:00`))}

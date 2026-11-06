@@ -230,7 +230,7 @@ export default function AppointmentDetailModal({
                   <DateTimePicker
                     mode="time"
                     value={timeStringToDate(new Date(), editTime)}
-                    is24Hour={false}
+                    is24Hour
                     onChange={handleTimeChange}
                   />
                 )}
