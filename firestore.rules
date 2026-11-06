@@ -30,12 +30,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Availability blocks: no PII, just date/time ranges — public read so
-    // the client web form can hide blocked days before submitting (the
-    // Cloud Function is the actual enforcement; this is only the UX hint).
-    // Only the therapist can create/edit them from the app.
+    // Availability blocks: the `reason` field can be private ("médico"), so
+    // only the therapist reads them. The public web form doesn't need them —
+    // it gets free slots from the getAvailability Cloud Function, which
+    // reads blocks via the Admin SDK and returns times only.
     match /blocks/{blockId} {
-      allow read: if true;
+      allow read: if isTherapist();
       allow create, update, delete: if isTherapist();
     }
 

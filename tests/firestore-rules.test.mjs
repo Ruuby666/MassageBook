@@ -44,6 +44,7 @@ async function check(name, promise) {
 
 console.log('therapist (has therapists/{uid} doc)');
 await check('reads reservations', assertSucceeds(getDocs(collection(therapist, 'reservations'))));
+await check('reads blocks', assertSucceeds(getDocs(collection(therapist, 'blocks'))));
 await check('cannot write reservations directly', assertFails(setDoc(doc(therapist, 'reservations/r2'), { a: 1 })));
 await check('creates blocks', assertSucceeds(setDoc(doc(therapist, 'blocks/b2'), { date: '2026-10-21', allDay: true })));
 await check('deletes blocks', assertSucceeds(deleteDoc(doc(therapist, 'blocks/b2'))));
@@ -58,6 +59,7 @@ await check('cannot write therapists', assertFails(setDoc(doc(therapist, 'therap
 console.log('stranger (signed in, no therapists doc)');
 await check('cannot read reservations', assertFails(getDocs(collection(stranger, 'reservations'))));
 await check('cannot read a single reservation', assertFails(getDoc(doc(stranger, 'reservations/r1'))));
+await check('cannot read blocks (reasons may be private)', assertFails(getDocs(collection(stranger, 'blocks'))));
 await check('cannot create blocks', assertFails(setDoc(doc(stranger, 'blocks/b3'), { allDay: true })));
 await check('cannot delete blocks', assertFails(deleteDoc(doc(stranger, 'blocks/b1'))));
 await check('cannot edit services', assertFails(setDoc(doc(stranger, 'services/s1'), { price: 1 })));
@@ -66,7 +68,7 @@ await check('cannot make itself the therapist', assertFails(setDoc(doc(stranger,
 await check("cannot read the therapist's doc", assertFails(getDoc(doc(stranger, 'therapists/therapist1'))));
 
 console.log('public web form (unauthenticated)');
-await check('reads blocks', assertSucceeds(getDocs(collection(anon, 'blocks'))));
+await check('cannot read blocks (gets free slots from getAvailability)', assertFails(getDocs(collection(anon, 'blocks'))));
 await check('reads services', assertSucceeds(getDocs(collection(anon, 'services'))));
 await check('cannot read reservations', assertFails(getDocs(collection(anon, 'reservations'))));
 await check('cannot create blocks', assertFails(setDoc(doc(anon, 'blocks/b4'), { allDay: true })));
