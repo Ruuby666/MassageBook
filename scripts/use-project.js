@@ -26,7 +26,9 @@ const variantLine = /^APP_VARIANT=/m.test(envContents) ? '' : `APP_VARIANT=${nam
 fs.writeFileSync(path.join(root, '.env'), `${envContents.trimEnd()}\n${variantLine}`);
 
 const vars = {};
-for (const line of envContents.split('\n')) {
+// \r?\n: .env files saved on Windows have CRLF line endings, and a stray
+// \r would make every line fail the regex below.
+for (const line of envContents.split(/\r?\n/)) {
   const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
   if (match) vars[match[1]] = match[2].trim();
 }
