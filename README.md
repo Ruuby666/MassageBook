@@ -194,10 +194,11 @@ Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del mó
 
 **Requisitos:** solo **Android**, con una build propia de EAS en un móvil físico. En Expo Go (Android quitó el push remoto en el SDK 53), en emuladores, en iPhone y en la versión web el módulo de notificaciones ni se carga: la app no pide permiso y todo lo demás sigue igual.
 
-**Configuración (una sola vez):**
-1. `npm install -g eas-cli`, `eas login` y `eas init` (esto añade el `projectId` a `app.json`; sin él no hay token).
-2. En Firebase Console → Configuración del proyecto → añade una app Android con el mismo `android.package` de `app.json`, descarga `google-services.json` a la raíz y añade `"googleServicesFile": "./google-services.json"` dentro de `android` en `app.json`.
-3. En Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `eas credentials` → Android → Push Notifications (FCM V1). Esa clave **sí es secreta**: no la subas al repo.
-4. Compila e instala el APK: `eas build -p android --profile preview`.
-5. Despliega rules y functions: `npx firebase-tools deploy --only firestore:rules,functions`.
+**Configuración (una sola vez):** las dos apps (ver "Dos apps") comparten un proyecto de EAS, y cada una se compila con su perfil de `eas.json` (`terapeuta` o `mio`). Cada perfil fija `APP_VARIANT` y lee sus variables de un entorno de EAS distinto: `production` para la terapeuta y `preview` para la demo.
+1. `npm install -g eas-cli`, `eas login` y `eas init`. Como la config es dinámica (`app.config.js`), `eas init` no puede escribir el `projectId` solo: cópialo en `app.json` dentro de `expo.extra.eas.projectId` (sin él no hay token push).
+2. En cada proyecto de Firebase, añade una app Android con su paquete (`io.github.ruuby666.massagebook` en `massagebook-terapeuta`, `io.github.ruuby666.massagebook.demo` en `massagesbooking`) y descarga su `google-services.json`.
+3. En [expo.dev](https://expo.dev) → el proyecto → Environment variables, crea en el entorno **production** (terapeuta) y en **preview** (demo): las `EXPO_PUBLIC_FIREBASE_*` de ese proyecto (como en `.env.example`) y `GOOGLE_SERVICES_JSON` como variable de tipo *archivo* con su `google-services.json`.
+4. En cada proyecto de Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `eas credentials` → Android → el paquete correspondiente → Push Notifications (FCM V1). Esa clave **sí es secreta**: no la subas al repo.
+5. Compila e instala: `eas build -p android --profile terapeuta` (para la terapeuta) o `--profile mio` (tu demo). Generan un APK instalable directamente.
+6. Despliega rules y functions en el proyecto que toque (`npm run use:terapeuta` o `use:mio` antes): `npx firebase-tools deploy --only firestore:rules,functions`.
 
