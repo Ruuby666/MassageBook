@@ -141,9 +141,10 @@ npm test                  # tests de la app
 npm run test:rules        # reglas de Firestore en el emulador
 npm run test:scheduled    # sendReminders y notifyTherapist en el emulador
 npm run test:booking      # 5 reservas simultáneas de la misma hora: solo entra una
+npm run test:web          # el formulario web de principio a fin en Chrome (headless)
 ```
 
-Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y notificaciones a personas reales, así que **no se pueden probar en producción**: `test:scheduled` las ejecuta en el emulador con Gmail y el servicio push sustituidos por falsos que solo anotan lo que se habría enviado, y a una hora fija. Conviene pasarlo antes de cada despliegue de functions. Los dos últimos necesitan Java (para el emulador de Firestore).
+Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y notificaciones a personas reales, así que **no se pueden probar en producción**: `test:scheduled` las ejecuta en el emulador con Gmail y el servicio push sustituidos por falsos que solo anotan lo que se habría enviado, y a una hora fija. Conviene pasarlo antes de cada despliegue de functions. Los de emulador necesitan Java; `test:web` además necesita Chrome instalado (o `CHROME_PATH`) y conexión a internet, porque la página carga el SDK de Firebase desde el CDN de Google. No modifica `web/`: prueba una copia temporal apuntada a los emuladores.
 
 ## Desplegar cambios a Firebase
 

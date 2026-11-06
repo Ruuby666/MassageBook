@@ -50,7 +50,7 @@ jobs:
       - run: npx jest --ci
 
   emulator:
-    name: Emulator (Firestore rules, scheduled functions)
+    name: Emulator (rules, scheduled functions, bookings, web form)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,3 +77,5 @@ jobs:
       - run: npm run test:rules
       - run: npm run test:scheduled
       - run: npm run test:booking
+      # Booking form end to end in headless Chrome (preinstalled on the runner).
+      - run: npm run test:web
