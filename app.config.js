@@ -15,8 +15,8 @@ const VARIANTS = {
 };
 
 // Each Firebase project has its own google-services.json (needed for push
-// on Android). EAS builds get it from the GOOGLE_SERVICES_JSON file env
-// var; locally it's google-services.<variant>.json in the project root.
+// on Android): google-services.<variant>.json in the project root, committed
+// (not secret). A GOOGLE_SERVICES_JSON file env var on EAS overrides it.
 function googleServicesFile(variantName) {
   if (process.env.GOOGLE_SERVICES_JSON) return process.env.GOOGLE_SERVICES_JSON;
   const local = `./google-services.${variantName}.json`;
