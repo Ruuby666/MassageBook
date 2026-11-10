@@ -305,7 +305,7 @@ exports.createReservation = onCall(async (request) => {
 // reminderSent so sendReminders re-evaluates against the new date, and
 // emails the client the old and new time so they don't miss the change.
 exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
-  await assertTherapist(request, 'Solo la terapeuta puede editar citas.');
+  await assertTherapist(request, 'Solo el masajista puede editar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -362,7 +362,7 @@ exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] 
 // real cancellation (e.g. a test or duplicate booking). Emailed before the
 // doc disappears so we still have their data to address it to.
 exports.deleteReservation = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
-  await assertTherapist(request, 'Solo la terapeuta puede eliminar citas.');
+  await assertTherapist(request, 'Solo el masajista puede eliminar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -392,7 +392,7 @@ exports.deleteReservation = onCall({ secrets: [gmailUser, gmailAppPassword] }, a
 exports.confirmReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    await assertTherapist(request, 'Solo la terapeuta puede confirmar reservas.');
+    await assertTherapist(request, 'Solo el masajista puede confirmar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {
@@ -420,7 +420,7 @@ exports.confirmReservation = onCall(
 exports.rejectReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    await assertTherapist(request, 'Solo la terapeuta puede rechazar reservas.');
+    await assertTherapist(request, 'Solo el masajista puede rechazar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {

@@ -8,11 +8,11 @@
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
-    "terapeuta": {
+    "masajista": {
       "extends": "base",
       "environment": "production",
       "autoIncrement": true,
-      "env": { "APP_VARIANT": "terapeuta" }
+      "env": { "APP_VARIANT": "masajista" }
     },
     "mio": {
       "extends": "base",

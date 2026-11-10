@@ -14,7 +14,7 @@
     "test:booking": "firebase emulators:exec --only firestore --project demo-massagebook \"node tests/booking-concurrency.test.cjs\"",
     "test:web": "firebase emulators:exec --only firestore,functions --project demo-massagebook \"node tests/web-e2e.test.mjs\"",
     "lint": "eslint .",
-    "use:terapeuta": "node scripts/use-project.js terapeuta",
+    "use:masajista": "node scripts/use-project.js masajista",
     "use:mio": "node scripts/use-project.js mio"
   },
   "dependencies": {
