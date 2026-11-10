@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "872195663101",
+    "project_id": "massagebook-639a4",
+    "storage_bucket": "massagebook-639a4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:872195663101:android:b75f08ff586570b454ca94",
+        "android_client_info": {
+          "package_name": "io.github.ruuby666.massagebook.demo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqDWcr4q0X6xldpzMsY2XRRGPu_evLzvA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

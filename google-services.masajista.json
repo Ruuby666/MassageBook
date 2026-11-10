@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1025482138477",
+    "project_id": "massagebook-terapeuta",
+    "storage_bucket": "massagebook-terapeuta.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1025482138477:android:e5c7c12121262362e1b064",
+        "android_client_info": {
+          "package_name": "io.github.ruuby666.massagebook"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1025482138477-boukrnb1ns6hvsubf5qga1fj707qg0hq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkiTmr9LY5cXzbFW2lPN5beWrT05nvmv4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1025482138477-boukrnb1ns6hvsubf5qga1fj707qg0hq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
