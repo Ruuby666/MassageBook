@@ -31,24 +31,34 @@ src/
   firebase/
     config.js               Config pública del proyecto Firebase (no es secreta)
     index.js                Inicialización de Auth/Firestore/Functions para la app
+  notifications/pushNotifications.js
+                            Registro del token push del móvil (solo Android) y
+                            manejo del toque en una notificación
   utils/dateHelpers.js      Helpers de fecha/hora (formateo, solapamiento, zonas horarias)
   theme.js                  Colores, tipografía y espaciados compartidos
 
 functions/
-  index.js                 createReservation (único punto de escritura de reservas),
+  index.js                 getAvailability (horarios libres para el calendario de la web),
+                             createReservation (único punto de escritura de reservas),
                              confirmReservation/rejectReservation (revisión manual de
                              reservas pendientes, envían email) y sendReminders (Cloud
-                             Function programada, envía el recordatorio por correo 2
-                             días antes de cada cita)
+                             Function programada, envía el recordatorio por correo en
+                             las 48 h previas a cada cita)
   validation.js             Lógica pura de validación/solapamiento de reservas
+  availability.js            Lógica pura de los huecos libres (reutiliza las reglas
+                             de validation.js para no ofrecer nada que luego se rechace)
   reminders.js               Lógica pura de la ventana de fecha y el contenido
                              del correo de recordatorio
   notifications.js           Lógica pura del contenido de los correos de
                              confirmación/rechazo
+  push.js                    Contenido y envío (vía Expo) de la notificación push
+                             de reserva nueva a la terapeuta
 
 web/
   index.html, styles.css, script.js, firebase-config.js
-                             Formulario público de reservas (Firebase Hosting)
+                             Formulario público de reservas (Firebase Hosting): el
+                             cliente elige masaje y luego día y hora en un calendario
+                             con solo los horarios libres
 
 firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
                              Configuración del proyecto Firebase
@@ -56,10 +66,13 @@ firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
 
 ## Modelo de datos (Firestore)
 
-**`reservations`** — solo lectura para el terapeuta autenticado; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
+**`therapists`** — quién es la terapeuta: un doc por cuenta con acceso, con id = UID de Firebase Auth (sin campos obligatorios). Estar logueado no basta: las rules y las Cloud Functions solo tratan como terapeuta a quien tenga este doc. Se gestiona solo desde la consola de Firebase (rules bloquean escrituras).
+
+**`reservations`** — solo lectura para la terapeuta; toda escritura pasa por las Cloud Functions `createReservation`/`confirmReservation`/`rejectReservation` (rules bloquean writes directos). `service`, `durationMinutes` y `price` los pone el servidor a partir del catálogo (`serviceId`), nunca vienen del cliente.
 ```
 clientName, phone, email, address, serviceId, service, durationMinutes,
-price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed')
+price, date (Timestamp), notes, createdAt, reminderSent, status ('pending' | 'confirmed'),
+pendingReminderSent, therapistReminderSent
 ```
 
 **`blocks`** — lectura/escritura del terapeuta autenticado directamente desde la app.
@@ -72,19 +85,30 @@ date ("YYYY-MM-DD"), allDay (bool), startTime, endTime, reason, createdAt
 name, description, durationMinutes, price, materials, enabled, createdAt
 ```
 
+**`slotLocks`** — un doc por día (id = "YYYY-MM-DD", día de Canarias) que solo usan las Cloud Functions para poner en fila las reservas de ese día. Sin acceso desde el cliente.
+
+**`pushTokens`** — un doc por móvil de la terapeuta (id = token de Expo). La app solo puede crear/actualizar el suyo; nadie lo lee desde el cliente, solo `createReservation` vía Admin SDK.
+```
+token, uid, platform, updatedAt
+```
+
 ## Reglas de negocio clave
 
 - La duración de cada masaje la define el terapeuta libremente (en minutos) al crear/editar el masaje en el catálogo — no está limitada a valores fijos.
 - El cliente (formulario web) y el terapeuta (app) **eligen el masaje del mismo catálogo** (`services`) en vez de escribir servicio/duración/precio a mano — el servidor toma esos datos del catálogo, no del request.
 - `enabled` en un masaje solo controla si el **cliente** puede elegirlo en el formulario público; el terapeuta puede seguir agendándolo ella misma aunque esté deshabilitado.
+- El **formulario web** muestra un **calendario de los próximos 30 días** con solo los horarios libres para el masaje elegido (cada 30 min), calculados por la Cloud Function `getAvailability` con las mismas reglas que `createReservation` (horario, bloqueos, colchón). Devuelve solo horas, nunca datos de otros clientes ni el motivo de un bloqueo. Las reservas pendientes también ocupan su hueco. Si alguien se adelanta y ocupa la hora mientras el cliente rellena el formulario, `createReservation` lo rechaza y la web recarga los horarios.
+- El **formulario web** no permite reservar **para el mismo día** (día local de Canarias): como mínimo para mañana. La terapeuta sí puede agendar para hoy desde la app.
 - El **formulario web** (sin autenticar) exige un **colchón de 30 minutos** entre citas.
 - El **formulario web** solo permite reservar entre **8:00 a.m. y 9:00 p.m.** (hora de Canarias); el masaje tampoco puede terminar después de las 9:00 p.m. La terapeuta puede seguir agendando fuera de ese horario desde la app si lo necesita.
 - El **formulario web** no permite reservar en días u horas que la terapeuta haya bloqueado (`blocks`); ella puede seguir agendando sobre su propio bloqueo desde la app si lo necesita.
 - La **creación manual en la app** (terapeuta autenticado) solo evita el solapamiento literal, sin exigir el colchón — el terapeuta puede agendar de forma más ajustada si lo necesita.
 - Ambos casos comparten la misma Cloud Function, así que la regla vive en un solo lugar.
+- **Reservas simultáneas:** si dos personas reservan la misma hora a la vez, se la queda la primera en completar el proceso; la otra recibe "Ese horario ya está ocupado" (y la web le recarga los horarios). La comprobación y el guardado van en una transacción de Firestore que además toma el cerrojo del día en `slotLocks`. Lo mismo al cambiar la hora de una cita.
 - Reserva del **formulario web** nace en `status: 'pending'` — el terapeuta la confirma o rechaza desde la app (`confirmReservation`/`rejectReservation`). Confirmar envía un email al cliente; rechazar borra la reserva (libera el horario) y también le avisa por email.
 - Reserva creada **manualmente por el terapeuta** nace en `status: 'confirmed'` — no requiere su propia revisión.
-- Cada cita con correo recibe un **recordatorio por email 2 días antes**, una sola vez (`reminderSent`). Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio.
+- Si la terapeuta **cambia el horario** de una cita (`updateReservationTime`), el cliente recibe un correo con el horario anterior y el nuevo. Si la **elimina** (`deleteReservation`), ella elige en la app si avisarle por correo o no (no toda eliminación es una cancelación real).
+- Cada cita confirmada con correo recibe un **recordatorio por email en las 48 h previas**, una sola vez (`reminderSent`). También las reservas con poca antelación o confirmadas tarde; solo se espera a que la reserva tenga 12 h, para no llegar justo detrás del correo de confirmación. Citas creadas por la terapeuta sin correo simplemente no reciben recordatorio, y las reservas aún **pendientes** de confirmar tampoco (la terapeuta todavía podría rechazarlas).
 
 ## Desarrollo local
 
@@ -94,6 +118,33 @@ npx expo start          # luego escanea el QR con Expo Go, o presiona 'a' con un
 ```
 
 Para levantar el formulario web localmente: abre `web/index.html` con un servidor estático (necesita HTTPS/localhost para que el SDK de Firebase funcione bien; `npx firebase-tools emulators:start --only hosting` es una opción).
+
+## Dos apps: la de la terapeuta y la demo
+
+El mismo código genera dos apps independientes, cada una con su proyecto de Firebase. Como tienen paquetes distintos, se pueden instalar las dos en el mismo móvil.
+
+| Variante | Para | Nombre | Paquete Android | Firebase |
+|---|---|---|---|---|
+| `terapeuta` | la terapeuta (uso real) | MassageBook | `io.github.ruuby666.massagebook` | `massagebook-terapeuta` |
+| `mio` | portfolio / demo | MassageBook Demo | `io.github.ruuby666.massagebook.demo` | `massagesbooking` |
+
+`app.config.js` elige la variante con `APP_VARIANT` (por defecto `mio`, para no generar nunca la app de la terapeuta por error). En local la fija `npm run use:terapeuta` / `npm run use:mio`, que además cambia `.env`, `web/firebase-config.js` y `.firebaserc` al proyecto correspondiente. Para las notificaciones push en Android, cada proyecto de Firebase tiene su `google-services.json`: guárdalo como `google-services.terapeuta.json` / `google-services.mio.json` en la raíz (están en `.gitignore`).
+
+## Tests
+
+GitHub Actions (`.github/workflows/ci.yml`) ejecuta todo esto en cada PR y en cada push a `developer` y `main`, además de compilar la app para web y Android. No despliega nada ni necesita secretos. Para ejecutarlo en local:
+
+```bash
+npm run lint              # ESLint: app, functions/ y web/
+npm test                  # tests de la app
+(cd functions && npm test) # tests de las Cloud Functions
+npm run test:rules        # reglas de Firestore en el emulador
+npm run test:scheduled    # sendReminders y notifyTherapist en el emulador
+npm run test:booking      # 5 reservas simultáneas de la misma hora: solo entra una
+npm run test:web          # el formulario web de principio a fin en Chrome (headless)
+```
+
+Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y notificaciones a personas reales, así que **no se pueden probar en producción**: `test:scheduled` las ejecuta en el emulador con Gmail y el servicio push sustituidos por falsos que solo anotan lo que se habría enviado, y a una hora fija. Conviene pasarlo antes de cada despliegue de functions. Los de emulador necesitan Java; `test:web` además necesita Chrome instalado (o `CHROME_PATH`) y conexión a internet, porque la página carga el SDK de Firebase desde el CDN de Google. No modifica `web/`: prueba una copia temporal apuntada a los emuladores.
 
 ## Desplegar cambios a Firebase
 
@@ -113,9 +164,17 @@ npx firebase-tools deploy --only hosting:booking
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
 
+## Acceso de la terapeuta (una sola vez por proyecto)
+
+Hazlo **antes** de desplegar rules/functions, o la terapeuta se queda sin acceso a la app:
+
+1. Firebase Console → Authentication → Users: copia el **UID** de la cuenta de la terapeuta.
+2. Firestore → crea la colección `therapists` con un documento cuyo **ID sea ese UID** (puede tener un campo cualquiera, p. ej. `name`).
+3. Authentication → Settings → User actions: desactiva **"Enable create (sign-up)"**, para que nadie pueda crearse cuentas con la API key pública.
+
 ## Recordatorios y notificaciones por correo
 
-`sendReminders` corre todos los días a las **10:00 (hora de Canarias)**, busca citas cuya fecha caiga exactamente 2 días después y les manda un correo (una sola vez, marca `reminderSent: true`). `confirmReservation`/`rejectReservation` reutilizan el mismo transporter para avisar al cliente en cuanto el terapeuta revisa su reserva pendiente. Todo se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
+`sendReminders` corre **cada hora de 9:00 a 21:00 (hora de Canarias)**, busca citas confirmadas en las próximas 48 h que aún no tengan recordatorio y les manda un correo (una sola vez, marca `reminderSent: true`). `confirmReservation`/`rejectReservation` reutilizan el mismo transporter para avisar al cliente en cuanto el terapeuta revisa su reserva pendiente. Todo se envía desde un Gmail normal por SMTP (sin necesidad de dominio propio verificado).
 
 **Configuración (una sola vez):**
 1. En la cuenta de Gmail que va a enviar los correos: activa la verificación en 2 pasos, luego genera una "contraseña de aplicación" en `myaccount.google.com` → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.
@@ -127,4 +186,26 @@ Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva e
    ```
    (o `functions:secrets:set NOMBRE` de forma interactiva, pegando el valor cuando lo pida).
 4. Despliega: `npx firebase-tools deploy --only functions`.
+
+## Notificaciones push a la terapeuta (Android)
+
+Cada reserva nueva del **formulario web** le manda una notificación push al móvil de la terapeuta ("Nueva reserva pendiente: cliente · masaje · fecha"); tocarla abre el calendario en ese día. Las reservas que crea ella misma no notifican. Además, en la app un banner muestra cuántas reservas siguen pendientes y los días con pendientes llevan un punto ámbar (sirve de respaldo si una notificación no llega).
+
+Además, la Cloud Function programada `notifyTherapist` (cada 15 min) le avisa de:
+- **Reservas sin revisar:** si una reserva lleva 2 h pendiente sin confirmar ni rechazar, un solo push agrupado ("2 reservas sin revisar…"; tocarlo abre el día de la más próxima). Solo entre las 9:00 y las 21:00 (hora de Canarias) y una vez por reserva (`pendingReminderSent`).
+- **Próxima cita:** unos 45–60 min antes de cada cita confirmada, un push con la hora, el cliente, el masaje y la dirección (a diferencia del de reserva nueva, este sí muestra la dirección: es a donde tiene que ir). Una vez por cita (`therapistReminderSent`, que se reinicia si se cambia la hora).
+
+Ambos avisos van en una sola función programada para quedarse dentro de los 3 trabajos gratuitos de Cloud Scheduler (`sendReminders` es el otro). Si la terapeuta no tiene ningún móvil registrado, no se marca nada y se reintenta en la siguiente pasada.
+
+Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del móvil en `pushTokens/{token}`; `createReservation` lee esos tokens y envía la notificación a través del servicio push de Expo (gratis, sin claves en el servidor). Los tokens que Expo reporta como inválidos se borran solos.
+
+**Requisitos:** solo **Android**, con una build propia de EAS en un móvil físico. En Expo Go (Android quitó el push remoto en el SDK 53), en emuladores, en iPhone y en la versión web el módulo de notificaciones ni se carga: la app no pide permiso y todo lo demás sigue igual.
+
+**Configuración (una sola vez):** las dos apps (ver "Dos apps") comparten un proyecto de EAS, y cada una se compila con su perfil de `eas.json` (`terapeuta` o `mio`). Cada perfil fija `APP_VARIANT` y lee sus variables de un entorno de EAS distinto: `production` para la terapeuta y `preview` para la demo.
+1. `npm install -g eas-cli`, `eas login` y `eas init`. Como la config es dinámica (`app.config.js`), `eas init` no puede escribir el `projectId` solo: cópialo en `app.json` dentro de `expo.extra.eas.projectId` (sin él no hay token push).
+2. En cada proyecto de Firebase, añade una app Android con su paquete (`io.github.ruuby666.massagebook` en `massagebook-terapeuta`, `io.github.ruuby666.massagebook.demo` en `massagesbooking`) y descarga su `google-services.json`.
+3. En [expo.dev](https://expo.dev) → el proyecto → Environment variables, crea en el entorno **production** (terapeuta) y en **preview** (demo): las `EXPO_PUBLIC_FIREBASE_*` de ese proyecto (como en `.env.example`) y `GOOGLE_SERVICES_JSON` como variable de tipo *archivo* con su `google-services.json`.
+4. En cada proyecto de Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `eas credentials` → Android → el paquete correspondiente → Push Notifications (FCM V1). Esa clave **sí es secreta**: no la subas al repo.
+5. Compila e instala: `eas build -p android --profile terapeuta` (para la terapeuta) o `--profile mio` (tu demo). Generan un APK instalable directamente.
+6. Despliega rules y functions en el proyecto que toque (`npm run use:terapeuta` o `use:mio` antes): `npx firebase-tools deploy --only firestore:rules,functions`.
 

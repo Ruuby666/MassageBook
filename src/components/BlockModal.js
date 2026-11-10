@@ -90,7 +90,7 @@ export default function BlockModal({ visible, date, onClose, onConfirm }) {
             <DateTimePicker
               mode="time"
               value={timeStringToDate(new Date(), pickerTarget === 'start' ? startTime : endTime)}
-              is24Hour={false}
+              is24Hour
               onChange={handleTimeChange}
             />
           )}

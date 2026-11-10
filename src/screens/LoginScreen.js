@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../firebase';
@@ -25,7 +24,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch (err) {
+    } catch {
       setError('Correo o contraseña incorrectos.');
     } finally {
       setLoading(false);

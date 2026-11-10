@@ -1,3 +1,4 @@
+const { setGlobalOptions } = require('firebase-functions/v2');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
@@ -11,9 +12,11 @@ const {
   assertFutureDate,
   assertWithinBusinessHours,
   getLocalDateKey,
+  assertNotSameDay,
   assertNotBlocked,
   applyService,
   getOverlapWindow,
+  getSlotLockKeys,
   hasOverlap,
 } = require('./validation');
 const {
@@ -21,7 +24,32 @@ const {
   isReminderCandidate,
   buildReminderEmail,
 } = require('./reminders');
-const { buildConfirmationEmail, buildRejectionEmail } = require('./notifications');
+const {
+  buildConfirmationEmail,
+  buildRejectionEmail,
+  buildRescheduleEmail,
+  buildCancellationEmail,
+} = require('./notifications');
+const { buildNewReservationPush, sendExpoPush } = require('./push');
+const {
+  getBookableDateKeys,
+  getAvailabilityQueryWindow,
+  computeAvailability,
+} = require('./availability');
+const {
+  isWithinNudgeHours,
+  selectPendingToNudge,
+  buildPendingNudgePush,
+  selectUpcoming,
+  buildUpcomingPush,
+  UPCOMING_LEAD_MINUTES,
+} = require('./therapistAlerts');
+
+// Cost guard: createReservation and getAvailability are public, and each
+// getAvailability call reads a month of reservations. Capping instances
+// per function stops a script hammering them from scaling the bill up;
+// a one-therapist business never needs more than a couple at once.
+setGlobalOptions({ maxInstances: 5 });
 
 initializeApp();
 const db = getFirestore();
@@ -36,18 +64,180 @@ function createGmailTransporter() {
   });
 }
 
+// Being signed in isn't enough — anyone could create a Firebase Auth
+// account with the public API key. Only users with a `therapists/{uid}`
+// doc (created by hand in the Firebase console) count as the therapist;
+// firestore.rules applies the same check.
+async function isTherapist(auth) {
+  if (!auth) return false;
+  const therapistSnap = await db.collection('therapists').doc(auth.uid).get();
+  return therapistSnap.exists;
+}
+
+async function assertTherapist(request, message) {
+  if (!(await isTherapist(request.auth))) {
+    throw new HttpsError('permission-denied', message);
+  }
+}
+
+// Shared by every client-facing email. A send failure is logged but never
+// fails the calling action — the booking change must go through even if
+// Gmail is unreachable. Manual entries may have no email; then it's a no-op.
+async function sendClientEmail(reservationId, to, { subject, html, text }) {
+  if (!to) return;
+  try {
+    await createGmailTransporter().sendMail({ from: gmailUser.value(), to, subject, html, text });
+  } catch (error) {
+    logger.error(`Failed to send "${subject}" email for reservation ${reservationId}:`, error);
+  }
+}
+
+// Sends one push to every phone the therapist is logged in on (see
+// pushTokens in firestore.rules) and deletes tokens Expo reports as dead.
+// Returns false when there was no phone to send to, so callers can retry
+// on a later run instead of marking the alert as sent. Throws on Expo
+// errors — callers decide whether that should fail anything.
+async function pushToTherapist(message) {
+  const tokensSnapshot = await db.collection('pushTokens').get();
+  const tokens = tokensSnapshot.docs.map((doc) => doc.data().token).filter(Boolean);
+  if (tokens.length === 0) return false;
+  const { invalidTokens } = await sendExpoPush(tokens, message);
+  await Promise.all(invalidTokens.map((token) => db.collection('pushTokens').doc(token).delete()));
+  return true;
+}
+
+// Scheduled functions work off the run's intended time (Cloud Scheduler's
+// scheduleTime, a few seconds before "now") rather than the wall clock, so
+// tests can run them at a fixed instant — they can't be tried out in
+// production, where they email and notify real people.
+function scheduledNow(event) {
+  const scheduled = event?.scheduleTime ? new Date(event.scheduleTime) : null;
+  return scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled : new Date();
+}
+
+const SLOT_TAKEN_MESSAGE = 'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.';
+
+// Checks the slot is free and saves the booking as one Firestore
+// transaction, so two clients booking the same slot at the same moment
+// can't both get it: whoever completes first wins, the other gets
+// SLOT_TAKEN_MESSAGE. A transaction alone doesn't see a *new* reservation
+// another transaction is inserting, so both also take the per-day lock
+// docs in `slotLocks` (see getSlotLockKeys) — that queues bookings for
+// the same day, and a retried loser re-reads and finds the slot taken.
+// `write(tx)` queues the reservation write; reads all happen before it.
+async function bookSlotAtomically({ startDate, durationMinutes, authenticated, excludeId }, write) {
+  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
+    startDate,
+    durationMinutes,
+    authenticated
+  );
+  const lockRefs = getSlotLockKeys(rangeStart, rangeEnd).map((key) =>
+    db.collection('slotLocks').doc(key)
+  );
+
+  await db.runTransaction(async (tx) => {
+    await Promise.all(lockRefs.map((ref) => tx.get(ref)));
+    const nearbySnapshot = await tx.get(
+      db
+        .collection('reservations')
+        .where('date', '>=', Timestamp.fromDate(queryStart))
+        .where('date', '<', Timestamp.fromDate(queryEnd))
+    );
+
+    const existingReservations = nearbySnapshot.docs
+      .filter((doc) => doc.id !== excludeId)
+      .map((doc) => {
+        const existing = doc.data();
+        const start = existing.date.toDate().getTime();
+        return { start, end: start + existing.durationMinutes * 60000 };
+      });
+
+    if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
+      throw new HttpsError('failed-precondition', SLOT_TAKEN_MESSAGE);
+    }
+
+    lockRefs.forEach((ref) => tx.set(ref, { lastBookingAt: Timestamp.now() }));
+    write(tx);
+  });
+}
+
+function toReservation(snapshot) {
+  return { ...snapshot.data(), date: snapshot.data().date.toDate() };
+}
+
+// Public booking calendar: the free start times for one massage over the
+// next BOOKING_WINDOW_DAYS days (from tomorrow), so clients pick a real
+// slot instead of guessing. Reservations hold client PII and blocks may
+// hold private reasons, so this runs server-side and returns only times —
+// never who booked or why a slot is taken. createReservation re-checks
+// everything, since a slot can be taken between this call and the booking.
+exports.getAvailability = onCall(async (request) => {
+  const serviceId = String(request.data?.serviceId || '').trim();
+  if (!serviceId) {
+    throw new HttpsError('invalid-argument', 'Selecciona un tipo de masaje.');
+  }
+
+  let durationMinutes;
+  try {
+    const serviceSnap = await db.collection('services').doc(serviceId).get();
+    ({ durationMinutes } = applyService({}, serviceSnap.exists ? serviceSnap.data() : null, {
+      authenticated: false,
+    }));
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    throw error;
+  }
+
+  const dateKeys = getBookableDateKeys();
+  const { queryStart, queryEnd } = getAvailabilityQueryWindow(dateKeys);
+
+  const [reservationsSnapshot, blocksSnapshot] = await Promise.all([
+    db
+      .collection('reservations')
+      .where('date', '>=', Timestamp.fromDate(queryStart))
+      .where('date', '<', Timestamp.fromDate(queryEnd))
+      .get(),
+    db
+      .collection('blocks')
+      .where('date', '>=', dateKeys[0])
+      .where('date', '<=', dateKeys[dateKeys.length - 1])
+      .get(),
+  ]);
+
+  const existingReservations = reservationsSnapshot.docs.map((doc) => {
+    const existing = doc.data();
+    const start = existing.date.toDate().getTime();
+    return { start, end: start + existing.durationMinutes * 60000 };
+  });
+
+  return {
+    durationMinutes,
+    days: computeAvailability({
+      dateKeys,
+      durationMinutes,
+      existingReservations,
+      blocks: blocksSnapshot.docs.map((doc) => doc.data()),
+    }),
+  };
+});
+
 // Single write path for reservations, called by both the public booking
 // form (unauthenticated) and the therapist's manual-entry screen
 // (authenticated). See validation.js for the business rules. Duration,
 // display name and price always come from the services catalog doc, never
 // from the client, so a tampered request can't change pricing/duration.
 exports.createReservation = onCall(async (request) => {
-  const authenticated = Boolean(request.auth);
+  // "authenticated" means "the therapist" throughout validation.js. Any
+  // other signed-in account gets the public form's stricter rules.
+  const authenticated = await isTherapist(request.auth);
 
   let reservation;
   try {
     reservation = parseReservation(request.data || {}, { authenticated });
     assertFutureDate(reservation.startDate);
+    assertNotSameDay(reservation.startDate, authenticated);
 
     const serviceSnap = await db.collection('services').doc(reservation.serviceId).get();
     reservation = applyService(reservation, serviceSnap.exists ? serviceSnap.data() : null, {
@@ -68,48 +258,41 @@ exports.createReservation = onCall(async (request) => {
 
   const { clientName, phone, email, address, serviceId, service, durationMinutes, price, notes, startDate } =
     reservation;
-  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
-    startDate,
-    durationMinutes,
-    authenticated
+
+  const docRef = db.collection('reservations').doc();
+  await bookSlotAtomically({ startDate, durationMinutes, authenticated }, (tx) =>
+    tx.create(docRef, {
+      clientName,
+      phone,
+      email,
+      address,
+      serviceId,
+      service,
+      durationMinutes,
+      price,
+      date: Timestamp.fromDate(startDate),
+      notes,
+      createdAt: Timestamp.now(),
+      reminderSent: false,
+      // Manual entries (authenticated therapist) are her own booking — no
+      // review step needed. Public form submissions wait for her to confirm.
+      status: authenticated ? 'confirmed' : 'pending',
+    })
   );
 
-  const nearbySnapshot = await db
-    .collection('reservations')
-    .where('date', '>=', Timestamp.fromDate(queryStart))
-    .where('date', '<', Timestamp.fromDate(queryEnd))
-    .get();
-
-  const existingReservations = nearbySnapshot.docs.map((doc) => {
-    const existing = doc.data();
-    const start = existing.date.toDate().getTime();
-    return { start, end: start + existing.durationMinutes * 60000 };
-  });
-
-  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
-    );
+  // Public form bookings wait on the therapist's review, so push a
+  // notification instead of relying on her opening the app. Manual
+  // entries are her own, no alert needed. Same as the confirm/reject
+  // emails, a push failure is logged but never fails the booking itself.
+  if (!authenticated) {
+    try {
+      await pushToTherapist(
+        buildNewReservationPush({ clientName, service, date: startDate }, docRef.id)
+      );
+    } catch (error) {
+      logger.error(`Failed to send new-booking push for reservation ${docRef.id}:`, error);
+    }
   }
-
-  const docRef = await db.collection('reservations').add({
-    clientName,
-    phone,
-    email,
-    address,
-    serviceId,
-    service,
-    durationMinutes,
-    price,
-    date: Timestamp.fromDate(startDate),
-    notes,
-    createdAt: Timestamp.now(),
-    reminderSent: false,
-    // Manual entries (authenticated therapist) are her own booking — no
-    // review step needed. Public form submissions wait for her to confirm.
-    status: authenticated ? 'confirmed' : 'pending',
-  });
 
   return { id: docRef.id };
 });
@@ -119,11 +302,10 @@ exports.createReservation = onCall(async (request) => {
 // only creates new ones. Reuses the same overlap logic as createReservation
 // (buffer-free, since this is always an authenticated call), just excluding
 // the reservation's own current slot from the conflict check. Resets
-// reminderSent so sendReminders re-evaluates against the new date.
-exports.updateReservationTime = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede editar citas.');
-  }
+// reminderSent so sendReminders re-evaluates against the new date, and
+// emails the client the old and new time so they don't miss the change.
+exports.updateReservationTime = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
+  await assertTherapist(request, 'Solo la terapeuta puede editar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -148,44 +330,39 @@ exports.updateReservationTime = onCall(async (request) => {
   }
   const { durationMinutes } = reservationSnap.data();
 
-  const { rangeStart, rangeEnd, queryStart, queryEnd } = getOverlapWindow(
-    startDate,
-    durationMinutes,
-    true
+  // Same atomic check-and-save as createReservation, ignoring the
+  // reservation's own current slot. Both reminder flags reset so the
+  // client email and the therapist's "next appointment" push are
+  // re-evaluated against the new time.
+  await bookSlotAtomically(
+    { startDate, durationMinutes, authenticated: true, excludeId: reservationId },
+    (tx) =>
+      tx.update(reservationRef, {
+        date: Timestamp.fromDate(startDate),
+        reminderSent: false,
+        therapistReminderSent: false,
+      })
   );
 
-  const nearbySnapshot = await db
-    .collection('reservations')
-    .where('date', '>=', Timestamp.fromDate(queryStart))
-    .where('date', '<', Timestamp.fromDate(queryEnd))
-    .get();
-
-  const existingReservations = nearbySnapshot.docs
-    .filter((doc) => doc.id !== reservationId)
-    .map((doc) => {
-      const existing = doc.data();
-      const start = existing.date.toDate().getTime();
-      return { start, end: start + existing.durationMinutes * 60000 };
-    });
-
-  if (hasOverlap(rangeStart, rangeEnd, existingReservations)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Ese horario ya está ocupado o muy cerca de otra cita. Elige otra hora.'
+  const previous = toReservation(reservationSnap);
+  if (previous.date.getTime() !== startDate.getTime()) {
+    await sendClientEmail(
+      reservationId,
+      previous.email,
+      buildRescheduleEmail({ ...previous, date: startDate }, previous.date)
     );
   }
-
-  await reservationRef.update({ date: Timestamp.fromDate(startDate), reminderSent: false });
 
   return { id: reservationId };
 });
 
 // Lets the therapist cancel/delete an existing reservation from the app.
-// Authenticated only, same reasoning as updateReservationTime.
-exports.deleteReservation = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Solo la terapeuta puede eliminar citas.');
-  }
+// Therapist only, same reasoning as updateReservationTime. The client is
+// emailed only when she asks to (notifyClient) — not every deletion is a
+// real cancellation (e.g. a test or duplicate booking). Emailed before the
+// doc disappears so we still have their data to address it to.
+exports.deleteReservation = onCall({ secrets: [gmailUser, gmailAppPassword] }, async (request) => {
+  await assertTherapist(request, 'Solo la terapeuta puede eliminar citas.');
 
   const reservationId = String(request.data?.reservationId || '').trim();
   if (!reservationId) {
@@ -196,6 +373,11 @@ exports.deleteReservation = onCall(async (request) => {
   const reservationSnap = await reservationRef.get();
   if (!reservationSnap.exists) {
     throw new HttpsError('not-found', 'Esa reserva ya no existe.');
+  }
+
+  if (request.data?.notifyClient === true) {
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildCancellationEmail(reservation));
   }
 
   await reservationRef.delete();
@@ -210,9 +392,7 @@ exports.deleteReservation = onCall(async (request) => {
 exports.confirmReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede confirmar reservas.');
-    }
+    await assertTherapist(request, 'Solo la terapeuta puede confirmar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {
@@ -227,21 +407,8 @@ exports.confirmReservation = onCall(
 
     await reservationRef.update({ status: 'confirmed' });
 
-    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
-    if (reservation.email) {
-      try {
-        const { subject, html, text } = buildConfirmationEmail(reservation);
-        await createGmailTransporter().sendMail({
-          from: gmailUser.value(),
-          to: reservation.email,
-          subject,
-          html,
-          text,
-        });
-      } catch (error) {
-        logger.error(`Failed to send confirmation email for reservation ${reservationId}:`, error);
-      }
-    }
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildConfirmationEmail(reservation));
 
     return { id: reservationId };
   }
@@ -253,9 +420,7 @@ exports.confirmReservation = onCall(
 exports.rejectReservation = onCall(
   { secrets: [gmailUser, gmailAppPassword] },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Solo la terapeuta puede rechazar reservas.');
-    }
+    await assertTherapist(request, 'Solo la terapeuta puede rechazar reservas.');
 
     const reservationId = String(request.data?.reservationId || '').trim();
     if (!reservationId) {
@@ -268,21 +433,8 @@ exports.rejectReservation = onCall(
       throw new HttpsError('not-found', 'Esa reserva ya no existe.');
     }
 
-    const reservation = { ...reservationSnap.data(), date: reservationSnap.data().date.toDate() };
-    if (reservation.email) {
-      try {
-        const { subject, html, text } = buildRejectionEmail(reservation);
-        await createGmailTransporter().sendMail({
-          from: gmailUser.value(),
-          to: reservation.email,
-          subject,
-          html,
-          text,
-        });
-      } catch (error) {
-        logger.error(`Failed to send rejection email for reservation ${reservationId}:`, error);
-      }
-    }
+    const reservation = toReservation(reservationSnap);
+    await sendClientEmail(reservationId, reservation.email, buildRejectionEmail(reservation));
 
     await reservationRef.delete();
 
@@ -290,26 +442,86 @@ exports.rejectReservation = onCall(
   }
 );
 
-// Daily at 10:00 Canary Islands time — emails clients whose reservation is
-// exactly 2 days away and hasn't already been reminded. Failures for one
-// reservation don't block the rest of the batch.
+// Every 15 minutes: push alerts for the therapist (see therapistAlerts.js).
+//  - Pending bookings unreviewed for 2+ hours get one grouped nudge,
+//    daytime only.
+//  - Confirmed appointments get a heads-up ~1 hour before, with address.
+// Each alert is flagged on the reservation so it's sent once; nothing is
+// flagged when she has no phone registered, so it's retried next run.
+// One scheduled function for both keeps the project within Cloud
+// Scheduler's free tier (3 jobs; sendReminders is the other one).
+exports.notifyTherapist = onSchedule(
+  { schedule: '*/15 * * * *', timeZone: 'Atlantic/Canary' },
+  async (event) => {
+    const now = scheduledNow(event);
+    const toAlert = (doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      date: doc.data().date.toDate(),
+      createdAt: doc.data().createdAt?.toDate(),
+    });
+
+    if (isWithinNudgeHours(now)) {
+      const pendingSnapshot = await db.collection('reservations').where('status', '==', 'pending').get();
+      const pending = selectPendingToNudge(pendingSnapshot.docs.map(toAlert), now);
+      if (pending.length > 0) {
+        try {
+          if (await pushToTherapist(buildPendingNudgePush(pending))) {
+            await Promise.all(
+              pending.map((r) => db.collection('reservations').doc(r.id).update({ pendingReminderSent: true }))
+            );
+          }
+        } catch (error) {
+          logger.error('Failed to send pending-bookings push:', error);
+        }
+      }
+    }
+
+    const upcomingSnapshot = await db
+      .collection('reservations')
+      .where('date', '>', Timestamp.fromDate(now))
+      .where('date', '<=', Timestamp.fromDate(new Date(now.getTime() + UPCOMING_LEAD_MINUTES * 60000)))
+      .get();
+    for (const reservation of selectUpcoming(upcomingSnapshot.docs.map(toAlert), now)) {
+      try {
+        if (await pushToTherapist(buildUpcomingPush(reservation))) {
+          await db.collection('reservations').doc(reservation.id).update({ therapistReminderSent: true });
+        }
+      } catch (error) {
+        logger.error(`Failed to send upcoming push for reservation ${reservation.id}:`, error);
+      }
+    }
+  }
+);
+
+// Hourly from 9:00 to 21:00 Canary Islands time — emails clients whose
+// confirmed reservation is within the next 48 hours and hasn't been
+// reminded yet (see isReminderCandidate). Running hourly instead of once
+// a day means short-notice and late-confirmed bookings still get one.
+// Failures for one reservation don't block the rest of the batch.
 exports.sendReminders = onSchedule(
-  { schedule: '0 10 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
-  async () => {
-    const { targetDateKey, queryStart, queryEnd } = getReminderQueryWindow();
+  { schedule: '0 9-21 * * *', timeZone: 'Atlantic/Canary', secrets: [gmailUser, gmailAppPassword] },
+  async (event) => {
+    const now = scheduledNow(event);
+    const { queryStart, queryEnd } = getReminderQueryWindow(now);
 
     const snapshot = await db
       .collection('reservations')
-      .where('date', '>=', Timestamp.fromDate(queryStart))
-      .where('date', '<', Timestamp.fromDate(queryEnd))
+      .where('date', '>', Timestamp.fromDate(queryStart))
+      .where('date', '<=', Timestamp.fromDate(queryEnd))
       .get();
 
     const candidates = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate() }))
-      .filter((reservation) => isReminderCandidate(reservation, targetDateKey));
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+      }))
+      .filter((reservation) => isReminderCandidate(reservation, now));
 
     if (candidates.length === 0) {
-      logger.info(`No reminders to send for ${targetDateKey}.`);
+      logger.info('No reminders to send.');
       return;
     }
 
