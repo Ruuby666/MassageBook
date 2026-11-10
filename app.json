@@ -35,6 +35,12 @@
           "color": "#2D6A5F"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "413c45e8-b0ac-4335-a476-8bfb1b9f403f"
+      }
+    },
+    "owner": "rsepulvedareal"
   }
 }
