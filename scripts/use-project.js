@@ -2,13 +2,13 @@
 // Switches the active Firebase project: copies .env.<name> to .env, then
 // regenerates web/firebase-config.js and .firebaserc from it (both are
 // gitignored, derived files — see the matching *.example files).
-// Usage: node scripts/use-project.js <name>   (e.g. terapeuta, mio)
+// Usage: node scripts/use-project.js <name>   (e.g. masajista, mio)
 const fs = require('fs');
 const path = require('path');
 
 const name = process.argv[2];
 if (!name) {
-  console.error('Usage: node scripts/use-project.js <name>   (e.g. terapeuta, mio)');
+  console.error('Usage: node scripts/use-project.js <name>   (e.g. masajista, mio)');
   process.exit(1);
 }
 

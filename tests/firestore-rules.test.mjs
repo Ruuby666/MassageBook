@@ -18,7 +18,7 @@ const env = await initializeTestEnvironment({
 
 await env.withSecurityRulesDisabled(async (ctx) => {
   const db = ctx.firestore();
-  await setDoc(doc(db, 'therapists/therapist1'), { name: 'Terapeuta' });
+  await setDoc(doc(db, 'therapists/therapist1'), { name: 'Masajista' });
   await setDoc(doc(db, 'reservations/r1'), { clientName: 'María', status: 'pending' });
   await setDoc(doc(db, 'blocks/b1'), { date: '2026-10-20', allDay: true });
   await setDoc(doc(db, 'services/s1'), { name: 'Relajante', enabled: true });

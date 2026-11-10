@@ -73,7 +73,9 @@ function buildSiteCopy() {
     `export const firebaseConfig = { apiKey: 'demo-key', projectId: '${PROJECT}', appId: 'demo' };\n`
   );
 
-  let script = readFileSync(new URL('script.js', webDir), 'utf8');
+  // Normalize first: with git's core.autocrlf (default on Windows) the
+  // working copy has CRLF, and the patterns below expect \n.
+  let script = readFileSync(new URL('script.js', webDir), 'utf8').replace(/\r\n/g, '\n');
   const patch = (from, to) => {
     if (!script.includes(from)) {
       throw new Error(`web/script.js changed: "${from.trim()}" not found — update tests/web-e2e.test.mjs`);
@@ -86,7 +88,7 @@ function buildSiteCopy() {
     'const db = getFirestore(app);',
     `const db = getFirestore(app);\nconnectFunctionsEmulator(functions, '127.0.0.1', ${FUNCTIONS_PORT});\nconnectFirestoreEmulator(db, '${firestoreHost}', ${firestorePort});`
   );
-  writeFileSync(join(siteDir, 'script.js'), script.replace(/\r\n/g, '\n'));
+  writeFileSync(join(siteDir, 'script.js'), script);
   return siteDir;
 }
 
