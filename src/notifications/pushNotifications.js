@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { db } from '../firebase';
@@ -17,6 +17,9 @@ const pushSupported =
 
 const Notifications = pushSupported ? require('expo-notifications') : null;
 const Device = pushSupported ? require('expo-device') : null;
+
+// This phone's token once stored, so sign-out knows which one to remove.
+let registeredToken = null;
 
 if (Notifications) {
   // Show the banner even while the app is open, not just in background.
@@ -62,7 +65,18 @@ export async function registerForPushNotifications(uid) {
     platform: Platform.OS,
     updatedAt: serverTimestamp(),
   });
+  registeredToken = token;
   return token;
+}
+
+// Deletes this phone's token so it stops getting the therapist's
+// notifications. Must run before signing out: the rules only let the
+// signed-in therapist delete their own token.
+export async function unregisterPushNotifications() {
+  if (!registeredToken) return;
+  const token = registeredToken;
+  registeredToken = null;
+  await deleteDoc(doc(db, 'pushTokens', token));
 }
 
 // Calls onOpen with the notification's data when the therapist taps one —

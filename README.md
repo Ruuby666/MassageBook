@@ -27,9 +27,10 @@ src/
     BlockModal.js              Modal para bloquear un día completo u horas
     ServiceFormModal.js        Modal para crear/editar un masaje del catálogo
     ServicePicker.js            Selector de masaje reutilizable (lista + detalles)
-    ExpandableFabMenu.js       Menú flotante desplegable (Cita / Bloquear / Masajes)
+    ExpandableFabMenu.js       Menú flotante desplegable (Cerrar sesión / Cita / Bloquear / Masajes)
     FloatingActionButton.js    Botón flotante reutilizable (apilable)
     ModalBackdrop.js           Fondo oscurecido de los modales (se cierran al tocar fuera)
+  auth/signOut.js           Cierre de sesión (borra antes el token push del móvil)
   firebase/
     config.js               Config pública del proyecto Firebase (no es secreta)
     index.js                Inicialización de Auth/Firestore/Functions para la app
@@ -103,7 +104,7 @@ name, description, durationMinutes, price, materials, enabled, createdAt
 
 **`slotLocks`** — un doc por día (id = "YYYY-MM-DD", día de Canarias) que solo usan las Cloud Functions para poner en fila las reservas de ese día. Sin acceso desde el cliente.
 
-**`pushTokens`** — un doc por móvil del masajista (id = token de Expo). La app solo puede crear/actualizar el suyo; nadie lo lee desde el cliente, solo `createReservation` vía Admin SDK.
+**`pushTokens`** — un doc por móvil del masajista (id = token de Expo). La app solo puede crear/actualizar el suyo y borrarlo al cerrar sesión, para que ese móvil deje de recibir avisos; nadie lo lee desde el cliente, solo las Cloud Functions vía Admin SDK.
 ```
 token, uid, platform, updatedAt
 ```
@@ -246,6 +247,6 @@ Queda firmado con la clave de depuración genérica de React Native: sirve para 
 
 - **El login dice "Correo o contraseña incorrectos" con la contraseña buena:** la app muestra ese mensaje para cualquier error, también **sin internet**. Mira primero que el móvil tenga conexión.
 - **"No se pudieron cargar los bloqueos: Missing or insufficient permissions" tras entrar:** esa cuenta no tiene su documento `therapists/{UID}` (ver "Acceso del masajista"), o `.env` apunta a otro proyecto (mira `EXPO_PUBLIC_FIREBASE_PROJECT_ID`; `npm run use:mio` lo regenera).
-- **Cambiar de usuario:** la app no tiene botón de cerrar sesión. Borra los datos de la app (en Expo Go: `adb shell pm clear host.exp.exponent`) y vuelve a entrar.
+- **Cambiar de usuario:** menú flotante → **Cerrar sesión**. Antes de salir borra el token push de ese móvil, para que deje de recibir los avisos; si no hay conexión en ese momento, cierra la sesión igualmente y el móvil puede seguir recibiéndolos hasta que vuelva a entrar y salir.
 - **Los tests de emulador fallan con un `Error` vacío en `loadFirestoreRules`:** otro programa ocupa el puerto 8080 (p. ej. un servidor del formulario web).
 
