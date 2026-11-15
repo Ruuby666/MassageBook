@@ -6,12 +6,24 @@
 // `npm run use:masajista` / `npm run use:mio`; on EAS each build profile in
 // eas.json sets it. Different package names let both be installed on the
 // same phone. app.json holds everything the two share.
+// Each variant also lives in its own Expo account (owner + EAS project), so
+// the masseur's builds and push credentials are theirs, not mine.
 const fs = require('node:fs');
 const path = require('node:path');
 
 const VARIANTS = {
-  masajista: { name: 'MassageBook', androidPackage: 'io.github.ruuby666.massagebook' },
-  mio: { name: 'MassageBook Demo', androidPackage: 'io.github.ruuby666.massagebook.demo' },
+  masajista: {
+    name: 'MassageBook',
+    androidPackage: 'io.github.ruuby666.massagebook',
+    owner: 'manosdelava',
+    easProjectId: '018e0086-def6-4c48-ba4a-d52d404065c5',
+  },
+  mio: {
+    name: 'MassageBook Demo',
+    androidPackage: 'io.github.ruuby666.massagebook.demo',
+    owner: 'rsepulvedareal',
+    easProjectId: '413c45e8-b0ac-4335-a476-8bfb1b9f403f',
+  },
 };
 
 // Each Firebase project has its own google-services.json (needed for push
@@ -37,11 +49,16 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: variant.name,
+    owner: variant.owner,
     android: {
       ...config.android,
       package: variant.androidPackage,
       googleServicesFile: googleServicesFile(variantName),
     },
-    extra: { ...config.extra, appVariant: variantName },
+    extra: {
+      ...config.extra,
+      ...(variant.easProjectId && { eas: { projectId: variant.easProjectId } }),
+      appVariant: variantName,
+    },
   };
 };

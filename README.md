@@ -71,10 +71,11 @@ web/
 firebase.json, firestore.rules, firestore.indexes.json, .firebaserc
                              Configuración del proyecto Firebase
 
-app.config.js, app.json, eas.json, google-services.<variante>.json
-                             Config de Expo/EAS y de cada app (ver "Dos apps")
+app.config.js, app.json, eas.json, google-services.mio.json
+                             Config de Expo/EAS (ver "La app")
 
-scripts/use-project.js       Cambia el proyecto de Firebase activo (npm run use:*)
+scripts/use-project.js       Genera .env, web/firebase-config.js y .firebaserc a partir
+                             de .env.mio (npm run use:mio)
 tests/                       Tests contra los emuladores (reglas, funciones programadas,
                              reservas simultáneas, formulario web en Chrome)
 ```
@@ -129,11 +130,11 @@ token, uid, platform, updatedAt
 
 ```bash
 npm install
-npm run use:mio         # elige el proyecto de Firebase: crea .env, web/firebase-config.js y .firebaserc
+npm run use:mio         # crea .env, web/firebase-config.js y .firebaserc desde .env.mio
 npx expo start          # luego escanea el QR con Expo Go, o pulsa 'a' con un emulador Android abierto
 ```
 
-Si cambias de proyecto con `npm run use:*`, reinicia Expo (`npx expo start -c` si la app sigue viendo el proyecto anterior).
+`.env.mio` no se sube al repo: créalo copiando `.env.example` y rellénalo con la config pública de tu proyecto de Firebase. Si lo cambias, vuelve a ejecutar `npm run use:mio` y reinicia Expo (`npx expo start -c` si la app sigue viendo la config anterior).
 
 Para el formulario web en local, sírvelo desde `localhost` (el SDK de Firebase lo necesita) en un puerto que **no** sea el 8080, porque ese lo usa el emulador de Firestore en los tests:
 
@@ -141,18 +142,15 @@ Para el formulario web en local, sírvelo desde `localhost` (el SDK de Firebase 
 npx http-server web -p 5500 -c-1   # http://localhost:5500
 ```
 
-La web llama a las Cloud Functions **desplegadas** del proyecto activo: si ahí no están desplegadas, el calendario dice "No pudimos conectar con el servidor".
+La web llama a las Cloud Functions **desplegadas** en el proyecto de Firebase: si no están desplegadas, el calendario dice "No pudimos conectar con el servidor".
 
-## Dos apps: la del masajista y la demo
+## La app
 
-El mismo código genera dos apps independientes, cada una con su proyecto de Firebase. Como tienen paquetes distintos, se pueden instalar las dos en el mismo móvil.
+| Nombre | Paquete Android | Firebase | Perfil de EAS |
+|---|---|---|---|
+| MassageBook Demo | `io.github.ruuby666.massagebook.demo` | `massagebook-639a4` | `mio` |
 
-| Variante | Para | Nombre | Paquete Android | Firebase |
-|---|---|---|---|---|
-| `masajista` | el masajista (uso real) | MassageBook | `io.github.ruuby666.massagebook` | `massagebook-terapeuta` |
-| `mio` | portfolio / demo | MassageBook Demo | `io.github.ruuby666.massagebook.demo` | `massagebook-639a4` |
-
-`app.config.js` elige la variante con `APP_VARIANT` (por defecto `mio`, para no generar nunca la app del masajista por error). En local la fija `npm run use:masajista` / `npm run use:mio`, que además cambia `.env`, `web/firebase-config.js` y `.firebaserc` al proyecto correspondiente. El ID del proyecto de Firebase del masajista sigue siendo `massagebook-terapeuta`: Google no permite renombrar IDs de proyecto. Para las notificaciones push en Android, cada proyecto de Firebase tiene su `google-services.json`: guárdalo como `google-services.masajista.json` / `google-services.mio.json` en la raíz. Se suben al repo a propósito: no son secretos (Google los trata como identificadores del proyecto, van dentro de cada APK y lo que protege los datos son las reglas de Firestore), y así EAS los encuentra al compilar en la nube.
+`app.config.js` fija el nombre, el paquete, la cuenta y el proyecto de EAS (`owner`, `easProjectId`) y el `google-services.json`. Para las notificaciones push en Android, el `google-services.json` del proyecto de Firebase está en la raíz como `google-services.mio.json`. Se sube al repo a propósito: no es secreto (Google lo trata como un identificador del proyecto, va dentro del APK y lo que protege los datos son las reglas de Firestore), y así EAS lo encuentra al compilar en la nube.
 
 ## Tests
 
@@ -173,8 +171,8 @@ Las funciones programadas (`sendReminders`, `notifyTherapist`) mandan correos y 
 ## Desplegar cambios a Firebase
 
 Hosting tiene dos targets: `booking` (el formulario público, `web/`) y `app` (build web
-de Expo, solo existe como sitio en el proyecto demo `massagebook-639a4`). Por eso
-`hosting` siempre se despliega por target, nunca a secas.
+de Expo). Por eso `hosting` siempre se despliega por target, nunca a secas. Antes de
+desplegar, `npm run use:mio` para que `.firebaserc` y `web/firebase-config.js` estén al día.
 
 ```bash
 # Todo junto (firestore + functions; hosting hay que indicarlo por target, ver abajo)
@@ -188,7 +186,7 @@ npx firebase-tools deploy --only hosting:booking
 
 Requiere haber corrido `npx firebase-tools login` una vez (sesión interactiva en el navegador).
 
-## Acceso del masajista (una sola vez por proyecto)
+## Acceso del masajista (una sola vez)
 
 Hazlo **antes** de desplegar rules/functions, o el masajista se queda sin acceso a la app:
 
@@ -225,13 +223,13 @@ Cómo funciona: al iniciar sesión la app pide permiso y guarda el token del mó
 
 **Requisitos:** solo **Android**, con una build propia (de EAS o local, ver abajo) en un móvil físico. En Expo Go (Android quitó el push remoto en el SDK 53), en emuladores, en iPhone y en la versión web el módulo de notificaciones ni se carga: la app no pide permiso y todo lo demás sigue igual.
 
-**Configuración (una sola vez):** las dos apps (ver "Dos apps") comparten un proyecto de EAS, y cada una se compila con su perfil de `eas.json` (`masajista` o `mio`). Cada perfil fija `APP_VARIANT` y lee sus variables de un entorno de EAS distinto: `production` para el masajista y `preview` para la demo.
-1. `npx eas-cli login` y `npx eas-cli init --account <cuenta>` (con varias cuentas de Expo exige `--account`). `eas init` escribe `expo.extra.eas.projectId` y `owner` en `app.json`; si además copia `extra.appVariant`, bórralo, porque lo pone `app.config.js`. Sin `projectId` no hay token push.
-2. En cada proyecto de Firebase, añade una app Android con su paquete (`io.github.ruuby666.massagebook` en `massagebook-terapeuta`, `io.github.ruuby666.massagebook.demo` en `massagebook-639a4`) y descarga su `google-services.json`.
-3. En [expo.dev](https://expo.dev) → el proyecto → Environment variables, crea en el entorno **production** (masajista) y en **preview** (demo): las `EXPO_PUBLIC_FIREBASE_*` de ese proyecto (como en `.env.example`). El `google-services.json` no hace falta subirlo: EAS usa el del repo (una variable `GOOGLE_SERVICES_JSON` de tipo *archivo*, si existe, tiene prioridad).
-4. En cada proyecto de Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `npx eas-cli credentials -p android` → el perfil → **Google Service Account** → **Manage your Google Service Account Key for Push Notifications (FCM V1)** → **Set up**. Hazlo desde la terminal: el asistente de la web de expo.dev pide antes un keystore. Esa clave **sí es secreta**: guárdala fuera del repo.
-5. Compila e instala: `eas build -p android --profile masajista` (para el masajista) o `--profile mio` (tu demo). Generan un APK instalable directamente y un enlace para descargarlo. La primera vez pide generar un keystore: di que sí; EAS lo guarda y firma con él las siguientes versiones, que así se instalan encima.
-6. Despliega rules y functions en el proyecto que toque (`npm run use:masajista` o `use:mio` antes): `npx firebase-tools deploy --only firestore:rules,functions`.
+**Configuración (una sola vez):** la app se compila con el perfil `mio` de `eas.json`, que lee sus variables del entorno **preview** de EAS.
+1. `npx eas-cli login`. El proyecto de EAS ya está enlazado en `app.config.js` (`owner` y `easProjectId`). Para usar uno tuyo, pon tu cuenta en `owner`, quita `easProjectId` y ejecuta `npx eas-cli init --non-interactive --force`: escribe el ID nuevo en `app.json`; muévelo a `easProjectId` y deja `app.json` sin `extra` ni `owner`. Sin `projectId` no hay token push.
+2. En el proyecto de Firebase, añade una app Android con el paquete `io.github.ruuby666.massagebook.demo` y guarda su `google-services.json` en la raíz como `google-services.mio.json`.
+3. En [expo.dev](https://expo.dev) → el proyecto → Environment variables, crea en el entorno **preview** las `EXPO_PUBLIC_FIREBASE_*` del proyecto (como en `.env.example`), o por terminal: `npx eas-cli env:set preview --name <NOMBRE> --value <valor> --visibility plaintext`. El `google-services.json` no hace falta subirlo: EAS usa el del repo (una variable `GOOGLE_SERVICES_JSON` de tipo *archivo*, si existe, tiene prioridad).
+4. En Firebase → Configuración del proyecto → Cuentas de servicio, genera una clave privada y súbela con `npx eas-cli credentials -p android` → perfil **mio** → **Google Service Account** → **Manage your Google Service Account Key for Push Notifications (FCM V1)** → **Set up**. Hazlo desde la terminal: el asistente de la web de expo.dev pide antes un keystore. Esa clave **sí es secreta**: guárdala fuera del repo.
+5. Compila e instala: `eas build -p android --profile mio`. Genera un APK instalable directamente y un enlace para descargarlo. La primera vez pide generar un keystore: di que sí; EAS lo guarda y firma con él las siguientes versiones, que así se instalan encima.
+6. Despliega rules y functions (`npm run use:mio` antes): `npx firebase-tools deploy --only firestore:rules,functions`.
 
 **Compilar el APK en local (sin EAS)**, para probar en tu móvil por USB (Android SDK + JDK 17; los pasos 1, 2, 4 y 6 de arriba siguen haciendo falta para que lleguen las push):
 
@@ -242,12 +240,12 @@ cd android && ./gradlew assembleRelease      # en Windows: .\gradlew.bat assembl
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-Queda firmado con la clave de depuración genérica de React Native: sirve para probar, pero la app que usa el masajista se compila con EAS para que las actualizaciones se instalen encima.
+Queda firmado con la clave de depuración genérica de React Native: sirve para probar, pero para instalarla en otros móviles compílala con EAS, así las actualizaciones se instalan encima.
 
 ## Problemas frecuentes
 
 - **El login dice "Correo o contraseña incorrectos" con la contraseña buena:** la app muestra ese mensaje para cualquier error, también **sin internet**. Mira primero que el móvil tenga conexión.
-- **"No se pudieron cargar los bloqueos: Missing or insufficient permissions" tras entrar:** esa cuenta no tiene su documento `therapists/{UID}` en ese proyecto (ver "Acceso del masajista"), o la app apunta a otro proyecto (mira `EXPO_PUBLIC_FIREBASE_PROJECT_ID` en `.env`).
+- **"No se pudieron cargar los bloqueos: Missing or insufficient permissions" tras entrar:** esa cuenta no tiene su documento `therapists/{UID}` (ver "Acceso del masajista"), o `.env` apunta a otro proyecto (mira `EXPO_PUBLIC_FIREBASE_PROJECT_ID`; `npm run use:mio` lo regenera).
 - **Cambiar de usuario:** la app no tiene botón de cerrar sesión. Borra los datos de la app (en Expo Go: `adb shell pm clear host.exp.exponent`) y vuelve a entrar.
 - **Los tests de emulador fallan con un `Error` vacío en `loadFirestoreRules`:** otro programa ocupa el puerto 8080 (p. ej. un servidor del formulario web).
 
