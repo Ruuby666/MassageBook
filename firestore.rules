@@ -55,11 +55,14 @@ service cloud.firestore {
     }
 
     // Expo push tokens of the therapist's phones, written by the app on
-    // login (doc id = the token itself, so re-registering just overwrites).
-    // Only createReservation reads them, via the Admin SDK, so nobody needs
-    // client-side read access; stale tokens are deleted server-side too.
+    // login (doc id = the token itself, so re-registering just overwrites)
+    // and deleted by it on sign-out, so that phone stops getting
+    // notifications. Only the Cloud Functions read them, via the Admin SDK,
+    // so nobody needs client-side read access; stale tokens are deleted
+    // server-side too.
     match /pushTokens/{token} {
-      allow read, delete: if false;
+      allow read: if false;
+      allow delete: if isTherapist() && resource.data.uid == request.auth.uid;
       allow create, update: if isTherapist()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.token == token;

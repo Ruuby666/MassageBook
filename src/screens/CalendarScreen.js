@@ -12,16 +12,26 @@ import { httpsCallable } from 'firebase/functions';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { signOutTherapist } from '../auth/signOut';
 import AppointmentCard from '../components/AppointmentCard';
 import AppointmentDetailModal from '../components/AppointmentDetailModal';
 import AppointmentModal from '../components/AppointmentModal';
 import BlockCard from '../components/BlockCard';
 import BlockModal from '../components/BlockModal';
 import ExpandableFabMenu from '../components/ExpandableFabMenu';
-import { db, functions } from '../firebase';
+import { auth, db, functions } from '../firebase';
 import { useNotificationTap } from '../notifications/pushNotifications';
 import { colors, spacing, typography } from '../theme';
 import '../utils/calendarLocale';
@@ -48,6 +58,35 @@ const updateReservationTime = httpsCallable(functions, 'updateReservationTime');
 const deleteReservation = httpsCallable(functions, 'deleteReservation');
 const confirmReservation = httpsCallable(functions, 'confirmReservation');
 const rejectReservation = httpsCallable(functions, 'rejectReservation');
+
+// Right after sign-out the listeners can fire one last permission error
+// before this screen unmounts; that's expected, not worth an alert.
+function alertLoadError(what, error) {
+  if (!auth.currentUser) return;
+  Alert.alert('Error', `No se pudieron cargar ${what}: ${error.message}`);
+}
+
+async function handleSignOut() {
+  try {
+    await signOutTherapist();
+  } catch (error) {
+    Alert.alert('No se pudo cerrar sesión', error.message || 'Intenta de nuevo.');
+  }
+}
+
+function confirmSignOut() {
+  const title = '¿Cerrar sesión?';
+  const message = 'Este móvil dejará de recibir avisos de reservas hasta que vuelvas a entrar.';
+  // Alert.alert with buttons does nothing on react-native-web.
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) handleSignOut();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: 'Cancelar', style: 'cancel' },
+    { text: 'Cerrar sesión', style: 'destructive', onPress: handleSignOut },
+  ]);
+}
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
@@ -87,7 +126,7 @@ export default function CalendarScreen() {
         setLoading(false);
       },
       (error) => {
-        Alert.alert('Error', 'No se pudieron cargar las citas: ' + error.message);
+        alertLoadError('las citas', error);
         setLoading(false);
       }
     );
@@ -95,17 +134,13 @@ export default function CalendarScreen() {
     const unsubscribeBlocks = onSnapshot(
       blocksQuery,
       (snapshot) => setBlocks(toDocs(snapshot)),
-      (error) => {
-        Alert.alert('Error', 'No se pudieron cargar los bloqueos: ' + error.message);
-      }
+      (error) => alertLoadError('los bloqueos', error)
     );
 
     const unsubscribeServices = onSnapshot(
       servicesQuery,
       (snapshot) => setServices(toDocs(snapshot)),
-      (error) => {
-        Alert.alert('Error', 'No se pudieron cargar los masajes: ' + error.message);
-      }
+      (error) => alertLoadError('los masajes', error)
     );
 
     return () => {
@@ -304,6 +339,14 @@ export default function CalendarScreen() {
             label: 'Cita',
             onPress: () => setAppointmentModalVisible(true),
             testID: 'fab-appointment',
+          },
+          // Last = top of the stack, furthest from the thumb.
+          {
+            key: 'signout',
+            icon: 'log-out-outline',
+            label: 'Cerrar sesión',
+            onPress: confirmSignOut,
+            testID: 'fab-signout',
           },
         ]}
       />

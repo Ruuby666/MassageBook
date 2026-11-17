@@ -11,6 +11,9 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 
+const TOKEN = 'ExponentPushToken[abc]';
+const OTHER_TOKEN = 'ExponentPushToken[other]';
+
 const env = await initializeTestEnvironment({
   projectId: 'demo-massagebook',
   firestore: { rules: readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8') },
@@ -22,12 +25,12 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'reservations/r1'), { clientName: 'María', status: 'pending' });
   await setDoc(doc(db, 'blocks/b1'), { date: '2026-10-20', allDay: true });
   await setDoc(doc(db, 'services/s1'), { name: 'Relajante', enabled: true });
+  await setDoc(doc(db, `pushTokens/${OTHER_TOKEN}`), { token: OTHER_TOKEN, uid: 'other' });
 });
 
 const therapist = env.authenticatedContext('therapist1').firestore();
 const stranger = env.authenticatedContext('stranger').firestore();
 const anon = env.unauthenticatedContext().firestore();
-const TOKEN = 'ExponentPushToken[abc]';
 
 let passed = 0;
 let failed = 0;
@@ -53,6 +56,8 @@ await check('registers own push token', assertSucceeds(setDoc(doc(therapist, `pu
 await check('cannot register a token for another uid', assertFails(setDoc(doc(therapist, `pushTokens/${TOKEN}`), { token: TOKEN, uid: 'other' })));
 await check('cannot register a token under a mismatched id', assertFails(setDoc(doc(therapist, 'pushTokens/other'), { token: TOKEN, uid: 'therapist1' })));
 await check('cannot read push tokens', assertFails(getDoc(doc(therapist, `pushTokens/${TOKEN}`))));
+await check("cannot delete another uid's token", assertFails(deleteDoc(doc(therapist, `pushTokens/${OTHER_TOKEN}`))));
+await check('deletes own push token (sign-out)', assertSucceeds(deleteDoc(doc(therapist, `pushTokens/${TOKEN}`))));
 await check('reads own therapists doc', assertSucceeds(getDoc(doc(therapist, 'therapists/therapist1'))));
 await check('cannot write therapists', assertFails(setDoc(doc(therapist, 'therapists/therapist1'), { name: 'Y' })));
 await check('cannot touch booking locks', assertFails(setDoc(doc(therapist, 'slotLocks/2030-07-15'), { x: 1 })));
@@ -65,6 +70,7 @@ await check('cannot create blocks', assertFails(setDoc(doc(stranger, 'blocks/b3'
 await check('cannot delete blocks', assertFails(deleteDoc(doc(stranger, 'blocks/b1'))));
 await check('cannot edit services', assertFails(setDoc(doc(stranger, 'services/s1'), { price: 1 })));
 await check('cannot register a push token', assertFails(setDoc(doc(stranger, `pushTokens/${TOKEN}`), { token: TOKEN, uid: 'stranger' })));
+await check('cannot delete a push token', assertFails(deleteDoc(doc(stranger, `pushTokens/${OTHER_TOKEN}`))));
 await check('cannot make itself the therapist', assertFails(setDoc(doc(stranger, 'therapists/stranger'), { name: 'Z' })));
 await check("cannot read the therapist's doc", assertFails(getDoc(doc(stranger, 'therapists/therapist1'))));
 
@@ -75,6 +81,7 @@ await check('cannot read reservations', assertFails(getDocs(collection(anon, 're
 await check('cannot create blocks', assertFails(setDoc(doc(anon, 'blocks/b4'), { allDay: true })));
 await check('cannot list therapists', assertFails(getDocs(collection(anon, 'therapists'))));
 await check('cannot read booking locks', assertFails(getDoc(doc(anon, 'slotLocks/2030-07-15'))));
+await check('cannot delete a push token', assertFails(deleteDoc(doc(anon, `pushTokens/${OTHER_TOKEN}`))));
 
 await env.cleanup();
 console.log(`\n${passed} passed, ${failed} failed`);
